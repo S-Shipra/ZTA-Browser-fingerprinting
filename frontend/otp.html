@@ -1,18 +1,106 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>OTP Verification</title>
-    <script src="js/otp.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZTA — OTP Verification</title>
+  <link rel="stylesheet" href="css/style.css">
 </head>
-
 <body>
-    <h2>OTP Verification</h2>
+  <div class="auth-wrap">
+    <div class="auth-card">
 
-    <input id="otp" maxlength="6" placeholder="Enter 6-digit OTP">
+      <div class="auth-logo">
+        <div class="shield">🔐</div>
+        <div>
+          <span>ZeroTrust</span>
+          <small>STEP-UP AUTHENTICATION</small>
+        </div>
+      </div>
 
-    <button onclick="verifyOTP()">Verify</button>
+      <h1 class="auth-title">Verify<br>Your Identity</h1>
+      <p class="auth-sub">// NEW DEVICE DETECTED — OTP REQUIRED</p>
 
-    <p id="result"></p>
+      <div class="result-box show info" style="margin-bottom:1.5rem">
+        Check your terminal — the OTP is printed there for demo purposes.
+      </div>
 
+      <div class="otp-boxes">
+        <input type="text" maxlength="1" id="d1" oninput="otpMove(this,'d2')" onkeydown="otpBack(event,this,null)">
+        <input type="text" maxlength="1" id="d2" oninput="otpMove(this,'d3')" onkeydown="otpBack(event,this,'d1')">
+        <input type="text" maxlength="1" id="d3" oninput="otpMove(this,'d4')" onkeydown="otpBack(event,this,'d2')">
+        <input type="text" maxlength="1" id="d4" oninput="otpMove(this,'d5')" onkeydown="otpBack(event,this,'d3')">
+        <input type="text" maxlength="1" id="d5" oninput="otpMove(this,'d6')" onkeydown="otpBack(event,this,'d4')">
+        <input type="text" maxlength="1" id="d6" oninput="otpMove(this,null)"  onkeydown="otpBack(event,this,'d5')">
+      </div>
+
+      <button class="btn-primary" id="otpBtn" onclick="verifyOTP()">
+        Verify OTP
+      </button>
+
+      <div class="result-box" id="resultBox">
+        <div id="resultText"></div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+function otpMove(el, nextId) {
+  if (el.value.length === 1 && nextId) document.getElementById(nextId).focus();
+}
+
+function otpBack(e, el, prevId) {
+  if (e.key === 'Backspace' && el.value === '' && prevId)
+    document.getElementById(prevId).focus();
+}
+
+function getOTPValue() {
+  return ['d1','d2','d3','d4','d5','d6']
+    .map(id => document.getElementById(id).value).join('');
+}
+
+async function verifyOTP() {
+  const btn = document.getElementById('otpBtn');
+  const box = document.getElementById('resultBox');
+  const txt = document.getElementById('resultText');
+
+  btn.disabled = true;
+  btn.classList.add('scanning');
+  btn.textContent = 'Verifying';
+
+  try {
+    const res = await fetch('http://127.0.0.1:5000/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: localStorage.getItem('user_id'),
+        otp: getOTPValue()
+      })
+    });
+
+    const data = await res.json();
+    box.className = 'result-box show';
+
+    if (data.status === 'ALLOW') {
+      box.classList.add('allow');
+      txt.innerHTML = '✓ OTP Verified — Device trusted. Redirecting...';
+      localStorage.setItem('otp_verified', 'true');
+      setTimeout(() => window.location.href = 'dashboard.html', 1200);
+    } else {
+      box.classList.add('block');
+      txt.innerHTML = '✗ ' + (data.message || 'Invalid OTP');
+    }
+
+  } catch(e) {
+    box.className = 'result-box show block';
+    txt.innerHTML = '✗ Connection failed';
+  }
+
+  btn.disabled = false;
+  btn.classList.remove('scanning');
+  btn.textContent = 'Verify OTP';
+}
+</script>
 </body>
 </html>

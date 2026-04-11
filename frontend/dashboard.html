@@ -1,39 +1,273 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Zero Trust Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZTA — Security Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .tooltip-wrap { position: relative; display: inline-block; }
+    .tooltip-wrap .tooltip-text {
+      visibility: hidden;
+      background: #1a1f2e;
+      color: #e2e8f0;
+      font-size: 0.72rem;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 10px;
+      position: absolute;
+      z-index: 99;
+      bottom: 130%;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .tooltip-wrap:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
+    .risk-val { cursor: help; border-bottom: 1px dashed #475569; }
+  </style>
 </head>
-
 <body>
+  <div class="dash-layout">
 
-<h2>🛡️ Security Dashboard</h2>
+    <header class="topbar">
+      <div class="topbar-logo">
+        <div class="shield">🛡</div>
+        ZeroTrust Dashboard
+      </div>
+      <div class="topbar-right">
+        <span><span class="status-dot"></span>SYSTEM ONLINE</span>
+        <span id="clockDisplay"></span>
+      </div>
+    </header>
 
-<h3 id="alertBox"></h3>
+    <main class="dash-main">
 
-<h3>Latest Risk Breakdown</h3>
-<ul id="riskBreakdown"></ul>
+      <div class="alert-banner" id="alertBanner">
+        🚨 <strong>Suspicious activity detected</strong> — High risk login flagged
+      </div>
 
-<h3>ML Detection Status</h3>
-<ul id="mlStatus"></ul>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Logins</div>
+          <div class="stat-value info" id="statTotal">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Allowed</div>
+          <div class="stat-value ok" id="statAllow">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">OTP Required</div>
+          <div class="stat-value warn" id="statOtp">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value danger" id="statBlock">—</div>
+        </div>
+      </div>
 
-<canvas id="riskChart" width="400" height="200"></canvas>
+      <div class="dash-grid">
 
-<table border="1">
-    <thead>
-        <tr>
-            <th>User</th>
-            <th>Action</th>
-            <th>Risk</th>
-            <th>Time</th>
-        </tr>
-    </thead>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Access Logs</span>
+            <span class="panel-badge" id="logCount">0 events</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="logs-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Decision</th>
+                  <th>Risk</th>
+                  <th>Explanation</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody id="logsTable"></tbody>
+            </table>
+          </div>
+        </div>
 
-    <tbody id="logsTable"></tbody>
-</table>
+        <div style="display:flex;flex-direction:column;gap:1.5rem">
 
-<script src="js/dashboard.js"></script>
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Risk Distribution</span>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="riskChart"></canvas>
+            </div>
+          </div>
 
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Risk Levels</span>
+            </div>
+            <div class="risk-meter">
+              <div class="risk-meter-label"><span>LOW (0–30)</span><span id="mLow">0</span></div>
+              <div class="meter-track"><div class="meter-fill" id="mLowBar" style="background:#00e676;width:0%"></div></div>
+              <div class="risk-meter-label"><span>MEDIUM (31–70)</span><span id="mMed">0</span></div>
+              <div class="meter-track"><div class="meter-fill" id="mMedBar" style="background:#ffb800;width:0%"></div></div>
+              <div class="risk-meter-label"><span>HIGH (71+)</span><span id="mHigh">0</span></div>
+              <div class="meter-track"><div class="meter-fill" id="mHighBar" style="background:#ff3b5c;width:0%"></div></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+<script>
+setInterval(() => {
+  document.getElementById('clockDisplay').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+let chartInstance = null;
+
+function drawChart(low, med, high) {
+  const ctx = document.getElementById('riskChart');
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Low', 'Medium', 'High'],
+      datasets: [{
+        data: [low, med, high],
+        backgroundColor: ['#00e676', '#ffb800', '#ff3b5c'],
+        borderWidth: 0,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          labels: { color: '#e2e8f0', font: { family: 'Share Tech Mono', size: 11 } }
+        }
+      },
+      cutout: '65%'
+    }
+  });
+}
+
+function getBadge(action) {
+  if (action.includes('BLOCK'))       return `<span class="badge block">✗ BLOCK</span>`;
+  if (action.includes('ALERT_OTP'))   return `<span class="badge alert">⚠ ALERT+OTP</span>`;
+  if (action.includes('ALERT_ALLOW')) return `<span class="badge alert">⚠ ALERT+ALLOW</span>`;
+  if (action.includes('OTP'))         return `<span class="badge otp">⚡ OTP</span>`;
+  if (action.includes('ALLOW'))       return `<span class="badge allow">✓ ALLOW</span>`;
+  return `<span class="badge">${action}</span>`;
+}
+
+function getRiskExplanation(risk, action) {
+  const reasons = [];
+
+  // Device trust reasons
+  if (risk === 0)                    reasons.push("✅ Fully trusted device");
+  if (risk === 20)                   reasons.push("🟢 Known device, not yet trusted");
+  if (risk >= 50 && risk < 70)      reasons.push("🟡 New or unverified device");
+  if (risk >= 70 && risk < 100)     reasons.push("🔴 High fingerprint mismatch");
+  if (risk >= 100)                   reasons.push("🔴 Unknown device + anomaly detected");
+
+  // ML flag
+  if (action.includes('ML'))         reasons.push("🤖 ML anomaly flagged");
+
+  // Decision reasons
+  if (action.includes('ALERT'))      reasons.push("🚨 Security alert raised");
+  if (action.includes('BLOCK'))      reasons.push("❌ Blocked by policy");
+  if (action.includes('OTP'))        reasons.push("⚡ Step-up auth required");
+  if (action.includes('ALLOW') && !action.includes('ALERT')) reasons.push("✅ Policy cleared");
+
+  // New device flag in action
+  if (action.includes('New Device')) reasons.push("📱 First time device seen");
+
+  return reasons.join(" · ") || "ℹ️ Standard login";
+}
+
+function getRiskColor(risk) {
+  if (risk >= 70) return '#ff3b5c';
+  if (risk >= 30) return '#ffb800';
+  return '#00e676';
+}
+
+async function loadLogs() {
+  try {
+    const res = await fetch('http://127.0.0.1:5000/logs');
+    const data = await res.json();
+
+    let allow = 0, otp = 0, block = 0, alertFound = false;
+    let low = 0, med = 0, high = 0;
+
+    const table = document.getElementById('logsTable');
+    table.innerHTML = '';
+
+    data.forEach(log => {
+      const a = log.action || '';
+
+      if (a.includes('BLOCK')) block++;
+      else if (a.includes('OTP')) otp++;
+      else allow++;
+
+      if (a.includes('ALERT')) alertFound = true;
+
+      if (log.risk <= 30) low++;
+      else if (log.risk <= 70) med++;
+      else high++;
+
+      const riskColor = getRiskColor(log.risk);
+      const explanation = getRiskExplanation(log.risk, a);
+
+      table.innerHTML += `
+  <tr onclick="window.location.href='log-detail.html?id=${log.id}'"
+      style="cursor:pointer"
+      onmouseover="this.style.background='#1e293b'"
+      onmouseout="this.style.background=''">
+    <td style="color:var(--accent)">#${log.user_id}</td>
+    <td>${getBadge(a)}</td>
+    <td>
+      <div class="tooltip-wrap">
+        <span class="risk-val" style="color:${riskColor};font-family:var(--mono)">${log.risk}</span>
+        <div class="tooltip-text">${explanation}</div>
+      </div>
+    </td>
+    <td style="color:var(--muted);font-size:0.72rem;max-width:200px">${explanation}</td>
+    <td style="color:var(--muted);font-size:0.75rem">${log.timestamp}</td>
+  </tr>`;
+    });
+
+    document.getElementById('statTotal').textContent = data.length;
+    document.getElementById('statAllow').textContent = allow;
+    document.getElementById('statOtp').textContent   = otp;
+    document.getElementById('statBlock').textContent  = block;
+    document.getElementById('logCount').textContent   = data.length + ' events';
+
+    if (alertFound) document.getElementById('alertBanner').classList.add('show');
+
+    const total = data.length || 1;
+    document.getElementById('mLow').textContent  = low;
+    document.getElementById('mMed').textContent  = med;
+    document.getElementById('mHigh').textContent = high;
+    document.getElementById('mLowBar').style.width  = (low/total*100)  + '%';
+    document.getElementById('mMedBar').style.width  = (med/total*100)  + '%';
+    document.getElementById('mHighBar').style.width = (high/total*100) + '%';
+
+    drawChart(low, med, high);
+
+  } catch(e) {
+    console.error('Dashboard error:', e);
+  }
+}
+
+loadLogs();
+setInterval(loadLogs, 5000);
+</script>
 </body>
 </html>

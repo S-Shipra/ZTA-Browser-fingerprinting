@@ -41,6 +41,22 @@ function computeBreakdown(logs) {
 
     return breakdown;
 }
+function getRiskExplanation(risk, decision) {
+    const reasons = [];
+
+    if (risk === 0)   reasons.push("✅ Fully trusted device, no anomalies");
+    if (risk >= 100)  reasons.push("🔴 Completely unknown device + high anomaly");
+    if (risk >= 80)   reasons.push("🔴 High fingerprint mismatch or ML anomaly");
+    if (risk >= 50 && risk < 80) reasons.push("🟡 New or unverified device");
+    if (risk === 20)  reasons.push("🟢 Known device, not yet trusted");
+
+    if (decision.includes("BLOCK"))  reasons.push("❌ Access denied by policy");
+    if (decision.includes("OTP"))    reasons.push("⚡ Step-up auth triggered");
+    if (decision.includes("ALLOW"))  reasons.push("✅ Policy cleared");
+    if (decision.includes("ALERT"))  reasons.push("🚨 Security alert raised");
+
+    return reasons.join(" | ") || "ℹ️ Standard login";
+}
 
 async function loadLogs() {
 

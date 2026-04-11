@@ -1,5 +1,6 @@
 from datetime import datetime
 from models.fingerprint_model import Fingerprint
+from services.attribute_weights import get_weight   # ← Shannon entropy weights
 
 
 # 🔷 Get last stored fingerprint (latest device)
@@ -17,7 +18,7 @@ def unusual_login_time():
     return hour < 6 or hour > 23
 
 
-# 🔷 MAIN RISK FUNCTION (UPGRADED)
+# 🔷 MAIN RISK FUNCTION (ENTROPY-WEIGHTED)
 def calculate_risk(user, new_fp_data):
 
     risk = 0
@@ -33,22 +34,25 @@ def calculate_risk(user, new_fp_data):
             }
         }
 
-    # 🔹 Screen
+    # 🔹 Screen — uses Shannon entropy weight for Screen_Inner
     if new_fp_data.get('screen') != last_fp.screen:
-        breakdown["screen_mismatch"] = 40
-        risk += 40
+        w = get_weight("Screen_Inner")
+        breakdown["screen_mismatch"] = w
+        risk += w
 
-    # 🔹 Platform
+    # 🔹 Platform — uses Shannon entropy weight for Feature_OS
     if new_fp_data.get('platform') != last_fp.platform:
-        breakdown["platform_mismatch"] = 30
-        risk += 30
+        w = get_weight("Feature_OS")
+        breakdown["platform_mismatch"] = w
+        risk += w
 
-    # 🔹 Language
+    # 🔹 Language — uses Shannon entropy weight for Language
     if new_fp_data.get('language') != last_fp.language:
-        breakdown["language_mismatch"] = 5
-        risk += 5
+        w = get_weight("Language")
+        breakdown["language_mismatch"] = w
+        risk += w
 
-    # 🔹 Time anomaly
+    # 🔹 Time anomaly (unchanged)
     if unusual_login_time():
         breakdown["time_anomaly"] = 20
         risk += 20
@@ -57,5 +61,3 @@ def calculate_risk(user, new_fp_data):
         "total_risk": risk,
         "breakdown": breakdown
     }
-
-    

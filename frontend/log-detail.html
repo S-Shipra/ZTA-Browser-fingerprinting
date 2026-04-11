@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZTA — Log Detail</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .detail-card {
+      background: var(--card, #0f1623);
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .detail-card h3 {
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      color: var(--muted, #64748b);
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #1e293b;
+      font-size: 0.85rem;
+      gap: 1rem;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-key { color: var(--muted, #64748b); white-space: nowrap; }
+    .detail-val { color: #e2e8f0; font-family: monospace; text-align: right; }
+    .reason-item {
+      padding: 0.4rem 0.8rem;
+      margin: 0.3rem 0;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    .risk-bar-wrap { margin: 0.6rem 0; }
+    .risk-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--muted, #64748b);
+      margin-bottom: 4px;
+    }
+    .risk-bar-track {
+      background: #1e293b;
+      border-radius: 99px;
+      height: 8px;
+      width: 100%;
+    }
+    .risk-bar-fill {
+      height: 8px;
+      border-radius: 99px;
+      transition: width 0.6s ease;
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--accent, #3b82f6);
+      font-size: 0.85rem;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      margin-bottom: 1rem;
+      font-family: inherit;
+    }
+    .back-btn:hover { text-decoration: underline; }
+    .hash-box {
+      font-family: monospace;
+      font-size: 0.72rem;
+      color: #64748b;
+      word-break: break-all;
+      background: #1e293b;
+      padding: 0.6rem;
+      border-radius: 6px;
+      margin-top: 0.5rem;
+    }
+    .trusted-yes { color: #00e676; }
+    .trusted-no  { color: #ff3b5c; }
+    .risk-big {
+      font-size: 3rem;
+      font-weight: bold;
+      font-family: monospace;
+      text-align: center;
+      padding: 1rem 0;
+    }
+    @media (max-width: 700px) {
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="dash-layout">
+
+    <header class="topbar">
+      <div class="topbar-logo">
+        <div class="shield">🛡</div>
+        ZeroTrust Dashboard
+      </div>
+      <div class="topbar-right">
+        <span><span class="status-dot"></span>SYSTEM ONLINE</span>
+        <span id="clockDisplay"></span>
+      </div>
+    </header>
+
+    <main class="dash-main">
+
+      <button class="back-btn" onclick="window.location.href='dashboard.html'">
+        ← Back to Dashboard
+      </button>
+
+      <div id="loadingMsg" style="color:#64748b;font-size:0.9rem">Loading log detail...</div>
+
+      <div id="content" style="display:none">
+
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem">
+          <div>
+            <div style="font-size:1.4rem;font-weight:bold" id="pageTitle">Log #</div>
+            <div style="color:#64748b;font-size:0.8rem" id="pageTimestamp"></div>
+          </div>
+          <div id="pageBadge" style="margin-left:auto"></div>
+        </div>
+
+        <div class="detail-grid">
+
+          <!-- Risk Score + Breakdown -->
+          <div class="detail-card">
+            <h3>Risk Score</h3>
+            <div class="risk-big" id="riskBig"></div>
+            <div id="riskBreakdownBars"></div>
+          </div>
+
+          <!-- Why this decision -->
+          <div class="detail-card">
+            <h3>Why this decision?</h3>
+            <div id="reasonsList"></div>
+          </div>
+
+          <!-- Browser Fingerprint -->
+          <div class="detail-card">
+            <h3>Browser Fingerprint</h3>
+            <div id="fingerprintDetails"></div>
+          </div>
+
+          <!-- Log Info -->
+          <div class="detail-card">
+            <h3>Log Info</h3>
+            <div id="logInfo"></div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+<script>
+setInterval(() => {
+  document.getElementById('clockDisplay').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+function getBadgeHTML(action) {
+  if (action.includes('BLOCK'))       return `<span class="badge block">✗ BLOCK</span>`;
+  if (action.includes('ALERT_OTP'))   return `<span class="badge alert">⚠ ALERT+OTP</span>`;
+  if (action.includes('ALERT_ALLOW')) return `<span class="badge alert">⚠ ALERT+ALLOW</span>`;
+  if (action.includes('OTP'))         return `<span class="badge otp">⚡ OTP</span>`;
+  if (action.includes('ALLOW'))       return `<span class="badge allow">✓ ALLOW</span>`;
+  return `<span class="badge">${action}</span>`;
+}
+
+function getRiskColor(risk) {
+  if (risk >= 70) return '#ff3b5c';
+  if (risk >= 30) return '#ffb800';
+  return '#00e676';
+}
+
+async function loadDetail() {
+  const params = new URLSearchParams(window.location.search);
+  const logId = params.get('id');
+
+  if (!logId) {
+    document.getElementById('loadingMsg').textContent = 'No log ID provided.';
+    return;
+  }
+
+  try {
+    const res = await fetch(`http://127.0.0.1:5000/logs/${logId}`);
+    if (!res.ok) throw new Error('Log not found');
+    const d = await res.json();
+
+    document.getElementById('loadingMsg').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+    // ── Header ──────────────────────────────────────────
+    document.getElementById('pageTitle').textContent = `Log #${d.id} — User #${d.user_id}`;
+    document.getElementById('pageTimestamp').textContent = d.timestamp;
+    document.getElementById('pageBadge').innerHTML = getBadgeHTML(d.action);
+
+    // ── Risk big number ──────────────────────────────────
+    const riskColor = getRiskColor(d.risk);
+    document.getElementById('riskBig').innerHTML =
+      `<span style="color:${riskColor}">${d.risk}</span><span style="font-size:1rem;color:#64748b"> / 100</span>`;
+
+    // ── Risk breakdown bars ──────────────────────────────
+    const barsEl = document.getElementById('riskBreakdownBars');
+    barsEl.innerHTML = '';
+    const breakdown = d.breakdown || {};
+
+    if (Object.keys(breakdown).length === 0) {
+      barsEl.innerHTML = '<div style="color:#64748b;font-size:0.85rem;margin-top:0.5rem">No breakdown available for this log.</div>';
+    } else {
+      for (const [key, val] of Object.entries(breakdown)) {
+        const pct = Math.min((val / 100) * 100, 100);
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        barsEl.innerHTML += `
+          <div class="risk-bar-wrap">
+            <div class="risk-bar-label">
+              <span>${label}</span>
+              <span style="color:${riskColor}">+${val}</span>
+            </div>
+            <div class="risk-bar-track">
+              <div class="risk-bar-fill" style="width:${pct}%;background:${riskColor}"></div>
+            </div>
+          </div>`;
+      }
+    }
+
+    // ── Reasons ──────────────────────────────────────────
+    const reasonsEl = document.getElementById('reasonsList');
+    if (d.reasons && d.reasons.length > 0) {
+      reasonsEl.innerHTML = d.reasons.map(r => `<div class="reason-item">${r}</div>`).join('');
+    } else {
+      reasonsEl.innerHTML = '<div class="reason-item">ℹ️ Standard login, no anomalies</div>';
+    }
+
+    // ── Fingerprint ──────────────────────────────────────
+    const fpEl = document.getElementById('fingerprintDetails');
+    if (d.fingerprint) {
+      const fp = d.fingerprint;
+      fpEl.innerHTML = `
+        <div class="detail-row">
+          <span class="detail-key">Screen</span>
+          <span class="detail-val">${fp.screen || '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Platform</span>
+          <span class="detail-val">${fp.platform || '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Language</span>
+          <span class="detail-val">${fp.language || '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Timezone</span>
+          <span class="detail-val">${fp.timezone || '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Color Depth</span>
+          <span class="detail-val">${fp.color_depth || '—'} bit</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">CPU Cores</span>
+          <span class="detail-val">${fp.cores || '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Memory</span>
+          <span class="detail-val">${fp.memory || '—'} GB</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Touch Points</span>
+          <span class="detail-val">${fp.touch_points ?? '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Cookies</span>
+          <span class="detail-val">${fp.cookies_enabled ? '✅ Enabled' : '❌ Disabled'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Device Trust</span>
+          <span class="detail-val">${fp.trusted
+            ? '<span class="trusted-yes">✅ Trusted</span>'
+            : '<span class="trusted-no">❌ Not Trusted</span>'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">User Agent</span>
+          <span class="detail-val" style="font-size:0.7rem;word-break:break-all;max-width:200px">${fp.user_agent || '—'}</span>
+        </div>
+        <div class="hash-box">Hash: ${fp.fingerprint_hash || '—'}</div>`;
+    } else {
+      fpEl.innerHTML = '<div style="color:#64748b;font-size:0.85rem">No fingerprint data found.</div>';
+    }
+
+    // ── Log Info ─────────────────────────────────────────
+    document.getElementById('logInfo').innerHTML = `
+      <div class="detail-row">
+        <span class="detail-key">Log ID</span>
+        <span class="detail-val">#${d.id}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">User ID</span>
+        <span class="detail-val">#${d.user_id}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">Action</span>
+        <span class="detail-val" style="font-size:0.75rem;word-break:break-all;max-width:200px">${d.action}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">Risk Score</span>
+        <span class="detail-val" style="color:${riskColor}">${d.risk} / 100</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">Timestamp</span>
+        <span class="detail-val">${d.timestamp}</span>
+      </div>`;
+
+  } catch(e) {
+    console.error('Detail error:', e);
+    document.getElementById('loadingMsg').textContent = 'Failed to load log: ' + e.message;
+  }
+}
+
+loadDetail();
+</script>
+</body>
+</html>
