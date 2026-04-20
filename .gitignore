@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/
+
+# Database
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
