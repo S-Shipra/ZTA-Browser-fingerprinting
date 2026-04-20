@@ -6,6 +6,7 @@
   <title>ZTA — Secure Login</title>
   <link rel="stylesheet" href="css/style.css">
   <script src="js/fingerprint.js" defer></script>
+  <script src="js/auth.js" defer></script>
 </head>
 <body>
   <div class="auth-wrap">
@@ -42,7 +43,7 @@
       </button>
 
       <div class="result-box" id="resultBox">
-        <div id="resultText"></div>
+        <div id="result"></div>
         <div class="risk-bar-wrap" id="riskBarWrap" style="display:none">
           <div class="risk-bar" id="riskBar"></div>
         </div>
@@ -51,87 +52,6 @@
     </div>
   </div>
 
-<script>
-window.addEventListener('load', async () => {
-  const fp = await getFingerprint();
-  document.getElementById('fpStatus').textContent =
-    'Fingerprint collected — ' + fp.screen + ' · ' + fp.platform;
-});
 
-async function login() {
-  const btn = document.getElementById('loginBtn');
-  const box = document.getElementById('resultBox');
-  const txt = document.getElementById('resultText');
-
-  btn.disabled = true;
-  btn.classList.add('scanning');
-  btn.textContent = 'Authenticating';
-
-  const fingerprint = await getFingerprint();
-
-  try {
-    const res = await fetch('http://127.0.0.1:5000/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: document.getElementById('username').value,
-        password: document.getElementById('password').value,
-        fingerprint: fingerprint
-      })
-    });
-
-    const data = await res.json();
-
-    if (data.risk_breakdown) {
-      localStorage.setItem('risk_breakdown', JSON.stringify(data.risk_breakdown));
-    }
-
-    let html = `<b>Decision:</b> ${data.decision} &nbsp;|&nbsp; <b>Risk Score:</b> ${data.risk}/100<br><br>`;
-
-    if (data.risk_breakdown) {
-      html += '<b>Risk Breakdown:</b><br>';
-      for (let k in data.risk_breakdown) {
-        html += `&nbsp;› ${k}: +${data.risk_breakdown[k]}<br>`;
-      }
-    }
-
-    if (data.ml_detected) html += '<br>⚠ ML anomaly detected';
-
-    box.className = 'result-box show';
-    if (data.decision === 'ALLOW') box.classList.add('allow');
-    if (data.decision === 'OTP')   box.classList.add('otp');
-    if (data.decision === 'BLOCK') box.classList.add('block');
-
-    txt.innerHTML = html;
-
-    const score = Math.min(data.risk, 100);
-    const barWrap = document.getElementById('riskBarWrap');
-    const bar = document.getElementById('riskBar');
-    barWrap.style.display = 'block';
-    bar.style.width = score + '%';
-    bar.style.background = score >= 70 ? '#ff3b5c' : score >= 30 ? '#ffb800' : '#00e676';
-
-    if (data.otp_required) {
-      localStorage.setItem('user_id', data.user_id || 1);
-      localStorage.setItem('otp_verified', 'false');
-      setTimeout(() => window.location.href = 'otp.html', 1200);
-      return;
-    }
-
-    if (data.decision === 'ALLOW') {
-      localStorage.setItem('otp_verified', 'true');
-      setTimeout(() => window.location.href = 'dashboard.html', 1200);
-    }
-
-  } catch(e) {
-    box.className = 'result-box show block';
-    txt.innerHTML = '✗ Connection failed — is the backend running?';
-  }
-
-  btn.disabled = false;
-  btn.classList.remove('scanning');
-  btn.textContent = 'Authenticate';
-}
-</script>
 </body>
 </html>
