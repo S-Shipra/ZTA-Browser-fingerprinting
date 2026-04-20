@@ -1,7 +1,24 @@
-// 🔐 HMAC GENERATION
+function stableStringify(obj) {
+    if (obj !== null && typeof obj === "object") {
+        if (Array.isArray(obj)) {
+            return JSON.stringify(obj.map(stableStringify));
+        }
+
+        const sortedKeys = Object.keys(obj).sort();
+        const result = {};
+
+        sortedKeys.forEach(key => {
+            result[key] = JSON.parse(stableStringify(obj[key]));
+        });
+
+        return JSON.stringify(result);
+    }
+
+    return JSON.stringify(obj);
+}
 async function generateHMAC(data) {
     const enc = new TextEncoder();
-    const key = "super_secret_key_123";  // must match backend SECRET_KEY
+    const key = "super_secret_key_123";
 
     const cryptoKey = await crypto.subtle.importKey(
         "raw",
@@ -11,10 +28,13 @@ async function generateHMAC(data) {
         ["sign"]
     );
 
+    // ✅ FIX: use sorted JSON (must match backend)
+    const message = stableStringify(data);
+
     const signature = await crypto.subtle.sign(
         "HMAC",
         cryptoKey,
-        enc.encode(JSON.stringify(data))
+        enc.encode(message)
     );
 
     return Array.from(new Uint8Array(signature))
@@ -36,13 +56,14 @@ async function login() {
 
     // ✅ FIX: SIGN FULL PAYLOAD (IMPORTANT)
     const payload = {
-        username,
-        password,
         fingerprint,
         timestamp
     };
 
     const signature = await generateHMAC(payload);
+    console.log("PAYLOAD:", payload);
+    console.log("STRING:", stableStringify(payload));;
+    console.log("SIGNATURE:", signature);
 
     let response;
 
@@ -53,7 +74,12 @@ async function login() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                ...payload,
+                // ...payload,
+                // signature
+                username,
+                password,
+                fingerprint,
+                timestamp,
                 signature
             })
         });
