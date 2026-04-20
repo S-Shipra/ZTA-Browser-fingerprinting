@@ -31,13 +31,18 @@ async function login() {
     const username = document.getElementById("username").value;
     const password = document.getElementById("password").value;
 
-    // 🔴 ADD TIMESTAMP + SIGNATURE
+    // 🔴 TIMESTAMP
     const timestamp = Date.now();
 
-    const signature = await generateHMAC({
+    // ✅ FIX: SIGN FULL PAYLOAD (IMPORTANT)
+    const payload = {
+        username,
+        password,
         fingerprint,
         timestamp
-    });
+    };
+
+    const signature = await generateHMAC(payload);
 
     let response;
 
@@ -48,10 +53,7 @@ async function login() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                username,
-                password,
-                fingerprint,
-                timestamp,
+                ...payload,
                 signature
             })
         });
@@ -78,6 +80,13 @@ async function login() {
         return;
     }
 
+    // ❌ Signature / validation error
+    if (response.status === 400) {
+        document.getElementById("result").innerText =
+            data.message || "Bad request";
+        return;
+    }
+
     const resultBox = document.getElementById("result");
 
     // 🔥 STORE JWT TOKEN
@@ -85,7 +94,7 @@ async function login() {
         localStorage.setItem("token", data.token);
     }
 
-    // 🔥 STORE BREAKDOWN (if backend sends it)
+    // 🔥 STORE BREAKDOWN
     if (data.risk_breakdown) {
         localStorage.setItem(
             "risk_breakdown",
