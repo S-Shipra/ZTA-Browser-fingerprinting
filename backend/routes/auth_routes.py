@@ -1,3 +1,9 @@
+from utils.hmac_utils import verify_hmac
+from utils.crypto_utils import encrypt_data, decrypt_data
+from utils.jwt_utils import generate_token
+import pyotp
+import time
+
 from flask import Blueprint, request, jsonify
 
 from services.auth_service import authenticate_user
@@ -7,29 +13,44 @@ from services.policy_engine import decide_action
 from services.monitoring_service import log_event
 from services.ml_engine import is_outlier
 
-from utils.otp_utils import generate_otp
-
 from models.fingerprint_model import Fingerprint
-from models.otp_model import OTP
-
 from database.db import db
+from models.user_model import User
 
 from datetime import datetime, timezone
 
 auth_bp = Blueprint('auth', __name__)
 
 
+# 🔐 LOGIN ROUTE
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.json
+
+    # 🔴 STEP 0: HMAC + REPLAY ATTACK PROTECTION
+    timestamp = data.get("timestamp")
+
+    if not timestamp or abs(time.time()*1000 - timestamp) > 5000:
+        return jsonify({"message": "Request expired"}), 400
+
+    payload = {
+        "fingerprint": data['fingerprint'],
+        "timestamp": timestamp
+    }
+
+    if not verify_hmac(payload, data.get("signature", "")):
+        return jsonify({"message": "Invalid request signature"}), 400
+
 
     # 🔹 Step 1: Authenticate user
     user = authenticate_user(data['username'], data['password'])
     if not user:
         return jsonify({"message": "Invalid credentials"}), 401
 
+
     # 🔹 Step 2: Generate fingerprint hash
     fingerprint_hash = generate_fingerprint(data['fingerprint'])
+
 
     # 🔹 Step 3: Check if device exists
     fp_record = Fingerprint.query.filter_by(
@@ -39,12 +60,14 @@ def login():
 
     risk = 0
 
+
     # 🔹 Step 4: Trusted device logic
     if not fp_record:
-        risk += 50   # New device
+        risk += 50
     else:
         if not fp_record.trusted:
-            risk += 20   # Known but not trusted
+            risk += 20
+
 
     # 🔹 Step 5: Additional risk checks
     risk_data = calculate_risk(user, data['fingerprint'])
@@ -56,6 +79,7 @@ def login():
         risk_breakdown["new_device"] = 50
     elif not fp_record.trusted:
         risk_breakdown["untrusted_device"] = 20
+
 
     # 🔹 Step 6: ML Outlier Detection
     fp_vector = [
@@ -72,14 +96,17 @@ def login():
     except:
         pass
 
+
     # 🔹 Step 7: Decide action
     decision = decide_action(risk)
+
 
     # 🔴 ALERT SYSTEM
     alert = False
     if risk > 70:
         alert = True
         print("🚨 ALERT: Suspicious login detected!")
+
 
     # 🔹 Step 8: Save fingerprint if new and not blocked
     if not fp_record:
@@ -103,54 +130,71 @@ def login():
             )
             db.session.add(new_fp)
 
-    # 🔹 Step 9: OTP logic
-    otp_value = None
-    if decision == "OTP":
-        otp_value = generate_otp()
-        otp_entry = OTP(user_id=user.id, otp=otp_value)
-        db.session.add(otp_entry)
-        print(f"🔐 OTP for user {user.id}: {otp_value}")
 
-    # 🔹 Step 10: Log event
+    # 🔹 Step 9: TOTP (REPLACED OLD OTP SYSTEM)
+    otp_value = None
+
+    if decision == "OTP":
+        totp = pyotp.TOTP(user.otp_secret)
+        otp_value = totp.now()
+
+        print(f"🔐 TOTP for user {user.id}: {otp_value}")
+
+
+    # 🔹 Step 10: JWT TOKEN
+    token = generate_token(user.id, user.role)
+
+
+    # 🔹 Step 11: Logging
     action = decision
     if alert:
         action = "ALERT_" + decision
 
     reasons = []
-    if not fp_record:       reasons.append("New Device")
-    if ml_flag:             reasons.append("ML Anomaly")
-    if alert:               reasons.append("High Risk")
+    if not fp_record: reasons.append("New Device")
+    if ml_flag: reasons.append("ML Anomaly")
+    if alert: reasons.append("High Risk")
 
     final_action = action
     if reasons:
         final_action = f"{action} | {', '.join(reasons)}"
 
     log_event(user.id, final_action, risk, breakdown=risk_breakdown)
+
+
     db.session.commit()
 
+
+    # 🔹 FINAL RESPONSE (UPDATED)
     return jsonify({
-        "decision"      : decision,
-        "risk"          : risk,
-        "risk_breakdown": risk_breakdown,
-        "ml_detected"   : ml_flag,
-        "otp_required"  : decision == "OTP",
-        "alert"         : alert,
-        "user_id"       : user.id
+        "decision": decision,
+        "risk": risk,
+        "token": token,
+        "otp_required": decision == "OTP",
+        "user_id": user.id
     })
 
 
+# 🔐 OTP VERIFY (TOTP VERSION)
 @auth_bp.route('/verify-otp', methods=['POST'])
 def verify_otp():
     data = request.json
 
-    user_id   = data['user_id']
+    user_id = data['user_id']
     otp_input = data['otp']
 
-    otp_record = OTP.query.filter_by(user_id=user_id, otp=otp_input).first()
+    user = User.query.get(user_id)
 
-    if not otp_record:
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    totp = pyotp.TOTP(user.otp_secret)
+
+    if not totp.verify(otp_input):
         return jsonify({"message": "Invalid OTP"}), 400
 
+
+    # 🔹 Mark latest device as trusted
     fp = Fingerprint.query.filter_by(user_id=user_id)\
         .order_by(Fingerprint.id.desc())\
         .first()
@@ -158,7 +202,9 @@ def verify_otp():
     if fp:
         fp.trusted = True
 
-    db.session.delete(otp_record)
     db.session.commit()
 
-    return jsonify({"message": "OTP Verified", "status": "ALLOW"})
+    return jsonify({
+        "message": "OTP Verified",
+        "status": "ALLOW"
+    })

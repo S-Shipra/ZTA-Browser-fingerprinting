@@ -2,11 +2,17 @@ from flask import Blueprint, jsonify
 from models.log_model import Log
 from models.fingerprint_model import Fingerprint
 
+from utils.auth_middleware import token_required  # 🔐 ADD THIS
+
 dash_bp = Blueprint('dashboard', __name__)
 
+
+# 🔐 PROTECTED ROUTE
 @dash_bp.route('/logs', methods=['GET'])
+@token_required
 def get_logs():
     logs = Log.query.order_by(Log.id.desc()).all()
+
     data = []
     for log in logs:
         data.append({
@@ -17,10 +23,13 @@ def get_logs():
             "breakdown": log.get_breakdown(),
             "timestamp": log.timestamp.strftime("%Y-%m-%d %H:%M:%S") if log.timestamp else ""
         })
+
     return jsonify(data)
 
 
+# 🔐 PROTECTED ROUTE
 @dash_bp.route('/logs/<int:log_id>', methods=['GET'])
+@token_required
 def get_log_detail(log_id):
     log = Log.query.get_or_404(log_id)
 
@@ -47,6 +56,7 @@ def get_log_detail(log_id):
 
     reasons = []
     action = log.action or ''
+
     if 'New Device' in action:  reasons.append("🆕 New Device detected")
     if 'ML Anomaly' in action:  reasons.append("🤖 ML anomaly flagged")
     if 'High Risk' in action:   reasons.append("⚠️ Risk score exceeded threshold")

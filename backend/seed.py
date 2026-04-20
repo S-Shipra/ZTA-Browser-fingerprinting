@@ -1,5 +1,6 @@
 import sys
 import os
+import pyotp
 
 # ── Make sure `backend/` is on the path so `app`, `database`, `models` resolve
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -130,7 +131,8 @@ def run_demo_seed():
         for u in DEMO_USERS:
             user = User(
                 username=u["username"],
-                password=generate_password_hash(u["password"])
+                password=generate_password_hash(u["password"]),
+                otp_secret=pyotp.random_base32()
             )
             db.session.add(user)
             users.append(user)

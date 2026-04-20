@@ -5,3 +5,4 @@ class User(db.Model):
     username = db.Column(db.String(50), unique=True)
     password = db.Column(db.String(100))
     role = db.Column(db.String(20))
+    otp_secret = db.Column(db.String(32))
