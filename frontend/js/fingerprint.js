@@ -1,4 +1,4 @@
-async function getFingerprint() {
+window.getFingerprint = async function () {
     return {
         screen        : window.screen.width + "x" + window.screen.height,
         platform      : navigator.platform,

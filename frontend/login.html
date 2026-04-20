@@ -51,7 +51,19 @@
 
     </div>
   </div>
-
+<script>
+window.addEventListener('load', async () => {
+  try {
+    const fp = await getFingerprint();
+    document.getElementById('fpStatus').textContent =
+      'Fingerprint collected — ' + fp.screen + ' · ' + fp.platform;
+  } catch (e) {
+    document.getElementById('fpStatus').textContent =
+      'Fingerprint failed ❌';
+    console.error("Fingerprint error:", e);
+  }
+});
+</script>
 
 </body>
 </html>
