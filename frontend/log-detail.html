@@ -196,8 +196,14 @@ async function loadDetail() {
     return;
   }
 
+  const token = localStorage.getItem('token');
+
   try {
-    const res = await fetch(`http://127.0.0.1:5000/logs/${logId}`);
+    const res = await fetch(`http://127.0.0.1:5000/logs/${logId}`, {
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
     if (!res.ok) throw new Error('Log not found');
     const d = await res.json();
 

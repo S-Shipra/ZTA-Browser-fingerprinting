@@ -16,6 +16,7 @@ function stableStringify(obj) {
 
     return JSON.stringify(obj);
 }
+
 async function generateHMAC(data) {
     const enc = new TextEncoder();
     const key = "super_secret_key_123";
@@ -28,7 +29,7 @@ async function generateHMAC(data) {
         ["sign"]
     );
 
-    // ✅ FIX: use sorted JSON (must match backend)
+    // Sign the full sorted payload (must match backend)
     const message = stableStringify(data);
 
     const signature = await crypto.subtle.sign(
@@ -43,7 +44,7 @@ async function generateHMAC(data) {
 }
 
 
-// 🔐 LOGIN FUNCTION
+// LOGIN FUNCTION
 async function login() {
 
     const fingerprint = await getFingerprint();
@@ -51,18 +52,20 @@ async function login() {
     const username = document.getElementById("username").value;
     const password = document.getElementById("password").value;
 
-    // 🔴 TIMESTAMP
     const timestamp = Date.now();
 
-    // ✅ FIX: SIGN FULL PAYLOAD (IMPORTANT)
+    // ✅ FIX: Include username + password in the signed payload
+    // so the signature covers the same data the server will verify
     const payload = {
+        username,
+        password,
         fingerprint,
         timestamp
     };
 
     const signature = await generateHMAC(payload);
     console.log("PAYLOAD:", payload);
-    console.log("STRING:", stableStringify(payload));;
+    console.log("STRING:", stableStringify(payload));
     console.log("SIGNATURE:", signature);
 
     let response;
@@ -74,12 +77,7 @@ async function login() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                // ...payload,
-                // signature
-                username,
-                password,
-                fingerprint,
-                timestamp,
+                ...payload,
                 signature
             })
         });
@@ -99,14 +97,14 @@ async function login() {
         return;
     }
 
-    // ❌ Invalid credentials
+    // Invalid credentials
     if (response.status === 401) {
         document.getElementById("result").innerText =
             data.message || "Invalid credentials";
         return;
     }
 
-    // ❌ Signature / validation error
+    // Signature / validation error
     if (response.status === 400) {
         document.getElementById("result").innerText =
             data.message || "Bad request";
@@ -115,12 +113,12 @@ async function login() {
 
     const resultBox = document.getElementById("result");
 
-    // 🔥 STORE JWT TOKEN
+    // STORE JWT TOKEN
     if (data.token) {
         localStorage.setItem("token", data.token);
     }
 
-    // 🔥 STORE BREAKDOWN
+    // STORE BREAKDOWN
     if (data.risk_breakdown) {
         localStorage.setItem(
             "risk_breakdown",
@@ -128,11 +126,11 @@ async function login() {
         );
     }
 
-    // 🔥 SHOW RESULT
+    // SHOW RESULT
     resultBox.innerHTML =
         `Decision: ${data.decision} | Risk Score: ${data.risk}/100`;
 
-    // 🔥 SHOW BREAKDOWN
+    // SHOW BREAKDOWN
     if (data.risk_breakdown) {
         let html = "<br><b>Risk Breakdown:</b><ul>";
         for (let key in data.risk_breakdown) {
@@ -142,13 +140,13 @@ async function login() {
         resultBox.innerHTML += html;
     }
 
-    // 🚨 ALERT
+    // ALERT
     if (data.alert) {
         resultBox.innerHTML +=
             `<br><span style="color:#ff3b5c">🚨 Suspicious activity flagged!</span>`;
     }
 
-    // 🔐 OTP FLOW
+    // OTP FLOW
     if (data.otp_required) {
         if (!data.user_id) {
             resultBox.innerText = "Server error: no user_id returned";
@@ -165,7 +163,7 @@ async function login() {
         return;
     }
 
-    // ✅ ALLOW FLOW
+    // ALLOW FLOW
     if (data.decision === "ALLOW") {
         localStorage.setItem("user_id", data.user_id);
         localStorage.setItem("otp_verified", "true");
@@ -177,7 +175,7 @@ async function login() {
         return;
     }
 
-    // ❌ BLOCK FLOW
+    // BLOCK FLOW
     if (data.decision === "BLOCK") {
         resultBox.innerHTML +=
             `<br><span style="color:#ff3b5c">❌ Access Denied — Risk too high.</span>`;

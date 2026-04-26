@@ -42,9 +42,22 @@
         ZeroTrust Dashboard
       </div>
       <div class="topbar-right">
-        <span><span class="status-dot"></span>SYSTEM ONLINE</span>
-        <span id="clockDisplay"></span>
-      </div>
+  <a href="crypto-lab.html" style="
+    font-family: var(--mono, 'Share Tech Mono', monospace);
+    font-size: 0.72rem;
+    color: #00d4ff;
+    text-decoration: none;
+    border: 1px solid #00d4ff33;
+    padding: 4px 12px;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+    transition: background 0.2s;
+  " onmouseover="this.style.background='#00d4ff15'" onmouseout="this.style.background='transparent'">
+    🔬 CRYPTO LAB
+  </a>
+  <span><span class="status-dot"></span>SYSTEM ONLINE</span>
+  <span id="clockDisplay"></span>
+</div>
     </header>
 
     <main class="dash-main">
@@ -200,7 +213,11 @@ function getRiskColor(risk) {
 
 async function loadLogs() {
   try {
-    const res = await fetch('http://127.0.0.1:5000/logs');
+    const res = await fetch('http://127.0.0.1:5000/logs', {
+    headers: {
+        'Authorization': 'Bearer ' + localStorage.getItem('token')
+    }
+});
     const data = await res.json();
 
     let allow = 0, otp = 0, block = 0, alertFound = false;

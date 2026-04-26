@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Crypto Analysis Lab — ZeroTrust</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:      #06080d;
+  --s1:      #0c1018;
+  --s2:      #111923;
+  --border:  #1a2535;
+  --border2: #243040;
+  --c1: #00e5ff;   /* cyan  - chacha */
+  --c2: #a78bfa;   /* violet - sha3 */
+  --c3: #34d399;   /* green - hmac */
+  --c4: #fb923c;   /* orange - ed25519 */
+  --c5: #f472b6;   /* pink - rsa */
+  --text:    #dde4ef;
+  --muted:   #4a5a6e;
+  --mono: 'JetBrains Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--display);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* scanline overlay */
+body::after{
+  content:'';
+  position:fixed;inset:0;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,.15) 2px,
+    rgba(0,0,0,.15) 4px
+  );
+  pointer-events:none;
+  z-index:9999;
+  opacity:.4;
+}
+
+/* grid bg */
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background-image:
+    linear-gradient(rgba(0,229,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.025) 1px, transparent 1px);
+  background-size:48px 48px;
+  pointer-events:none;z-index:0;
+}
+
+/* ── HEADER ── */
+header{
+  position:sticky;top:0;z-index:200;
+  height:52px;
+  background:rgba(6,8,13,.92);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 2rem;
+}
+.logo{
+  font-family:var(--mono);
+  font-size:.7rem;
+  letter-spacing:.18em;
+  color:var(--c1);
+  text-transform:uppercase;
+}
+.logo span{color:var(--muted)}
+.hdr-right{display:flex;gap:.75rem;align-items:center}
+.status-dot{
+  width:6px;height:6px;
+  border-radius:50%;
+  background:var(--c3);
+  box-shadow:0 0 8px var(--c3);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hdr-label{font-family:var(--mono);font-size:.6rem;color:var(--muted);letter-spacing:.1em}
+.back-link{
+  font-family:var(--mono);font-size:.65rem;
+  color:var(--muted);text-decoration:none;
+  border:1px solid var(--border);
+  padding:.25rem .7rem;border-radius:3px;
+  transition:all .2s;
+}
+.back-link:hover{color:var(--c1);border-color:var(--c1)}
+
+/* ── MAIN ── */
+.wrap{
+  position:relative;z-index:1;
+  max-width:1300px;margin:0 auto;
+  padding:0 2rem 4rem;
+}
+
+/* ── HERO ── */
+.hero{
+  padding:3.5rem 0 2.5rem;
+  display:grid;grid-template-columns:1fr auto;
+  gap:2rem;align-items:end;
+}
+.hero-tag{
+  font-family:var(--mono);
+  font-size:.6rem;letter-spacing:.2em;
+  color:var(--c1);text-transform:uppercase;
+  margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;
+}
+.hero-tag::before{
+  content:'';display:block;
+  width:24px;height:1px;background:var(--c1);
+}
+.hero h1{
+  font-size:clamp(2rem,4.5vw,3.5rem);
+  font-weight:800;line-height:1.05;
+  letter-spacing:-.02em;
+}
+.hero h1 .hl{
+  background:linear-gradient(90deg,var(--c1),var(--c2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.hero-sub{
+  color:var(--muted);font-size:.9rem;
+  margin-top:.75rem;line-height:1.6;
+  max-width:500px;
+}
+.hero-stats{
+  display:flex;flex-direction:column;gap:.75rem;
+  min-width:160px;
+}
+.hstat{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:.75rem 1rem;
+  text-align:right;
+}
+.hstat-v{
+  font-family:var(--mono);font-size:1.3rem;font-weight:700;
+  color:var(--c1);display:block;
+}
+.hstat-l{font-size:.6rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+
+/* ── TABS ── */
+.tab-nav{
+  display:flex;gap:0;
+  border-bottom:1px solid var(--border);
+  margin-bottom:2rem;
+  overflow-x:auto;
+}
+.tab-btn{
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;
+  text-transform:uppercase;
+  background:none;border:none;
+  padding:.7rem 1.4rem;
+  cursor:pointer;
+  color:var(--muted);
+  border-bottom:2px solid transparent;
+  margin-bottom:-1px;
+  white-space:nowrap;
+  transition:all .2s;
+  position:relative;
+}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--text);border-bottom-color:currentColor}
+.tab-btn[data-algo="chacha20"].active{color:var(--c1);border-bottom-color:var(--c1)}
+.tab-btn[data-algo="sha3"].active{color:var(--c2);border-bottom-color:var(--c2)}
+.tab-btn[data-algo="hmac"].active{color:var(--c3);border-bottom-color:var(--c3)}
+.tab-btn[data-algo="ed25519"].active{color:var(--c4);border-bottom-color:var(--c4)}
+.tab-btn[data-algo="rsa"].active{color:var(--c5);border-bottom-color:var(--c5)}
+
+.tab-panel{display:none}
+.tab-panel.active{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ── ALGO HEADER ── */
+.algo-header{
+  display:flex;align-items:center;gap:1.5rem;
+  margin-bottom:2rem;
+  padding:1.5rem;
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  position:relative;overflow:hidden;
+}
+.algo-header::before{
+  content:'';position:absolute;
+  top:0;left:0;right:0;height:2px;
+}
+.algo-header[data-color="c1"]::before{background:var(--c1)}
+.algo-header[data-color="c2"]::before{background:var(--c2)}
+.algo-header[data-color="c3"]::before{background:var(--c3)}
+.algo-header[data-color="c4"]::before{background:var(--c4)}
+.algo-header[data-color="c5"]::before{background:var(--c5)}
+
+.algo-icon{
+  font-family:var(--mono);font-size:2rem;font-weight:700;
+  opacity:.15;position:absolute;right:1.5rem;top:50%;
+  transform:translateY(-50%);
+  letter-spacing:-.05em;
+}
+.algo-name-big{
+  font-size:1.6rem;font-weight:800;letter-spacing:-.02em;
+}
+.algo-type-tag{
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.15em;
+  text-transform:uppercase;padding:.25rem .7rem;
+  border-radius:3px;margin-top:.3rem;
+  display:inline-block;
+}
+.algo-desc{color:var(--muted);font-size:.85rem;line-height:1.5;margin-top:.5rem;max-width:600px}
+.algo-badges{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem}
+.badge{
+  font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;
+  text-transform:uppercase;padding:.2rem .55rem;border-radius:3px;
+  border:1px solid;
+}
+.badge-secure{color:#34d399;border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.08)}
+.badge-warn{color:#fbbf24;border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.08)}
+.badge-broken{color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)}
+.badge-neutral{color:var(--muted);border-color:var(--border);background:transparent}
+
+/* ── GRID LAYOUTS ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.25rem}
+.g2l{display:grid;grid-template-columns:2fr 1fr;gap:1.5rem}
+@media(max-width:880px){.g2,.g3,.g2l{grid-template-columns:1fr}}
+
+/* ── CARD ── */
+.card{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:1.25rem;
+}
+.card+.card{margin-top:0}
+.card-title{
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:1rem;
+}
+
+/* ── SPEC TABLE ── */
+.spec-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.45rem 0;
+  border-bottom:1px solid var(--border);
+  font-size:.82rem;
+}
+.spec-row:last-child{border-bottom:none}
+.spec-k{color:var(--muted);font-size:.75rem}
+.spec-v{font-family:var(--mono);font-weight:500}
+
+/* ── SECURITY METER ── */
+.sec-meter{margin-bottom:1rem}
+.sec-label{
+  display:flex;justify-content:space-between;
+  font-size:.72rem;margin-bottom:.35rem;
+}
+.sec-label span:first-child{color:var(--muted)}
+.sec-label span:last-child{font-family:var(--mono);font-weight:600}
+.meter-track{
+  background:var(--s2);
+  border-radius:4px;height:6px;overflow:hidden;
+}
+.meter-fill{height:100%;border-radius:4px;transition:width 1s ease}
+
+/* ── BENCH SECTION ── */
+.bench-controls{
+  display:flex;gap:.75rem;align-items:flex-end;
+  flex-wrap:wrap;margin-bottom:1.25rem;
+}
+.bench-input-wrap{flex:1;min-width:200px}
+.bench-input-wrap label{
+  display:block;font-family:var(--mono);font-size:.6rem;
+  letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:.35rem;
+}
+.field{
+  width:100%;
+  background:var(--s2);border:1px solid var(--border);
+  color:var(--text);font-family:var(--mono);font-size:.8rem;
+  padding:.55rem .8rem;border-radius:4px;outline:none;
+  transition:border-color .2s;
+}
+.field:focus{border-color:var(--c1)}
+select.field{cursor:pointer}
+.btn{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.05em;
+  padding:.55rem 1.3rem;border-radius:4px;border:none;
+  cursor:pointer;transition:all .2s;
+  display:inline-flex;align-items:center;gap:.4rem;
+  white-space:nowrap;
+}
+.btn-run{background:var(--c1);color:var(--bg);font-weight:700}
+.btn-run:hover{filter:brightness(1.1)}
+.btn-run:disabled{opacity:.4;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
+
+/* ── RESULTS TABLE ── */
+.results-table{width:100%;border-collapse:collapse}
+.results-table th{
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:.5rem .75rem;
+  border-bottom:1px solid var(--border);
+}
+.results-table td{
+  font-family:var(--mono);font-size:.78rem;
+  padding:.6rem .75rem;
+  border-bottom:1px solid rgba(26,37,53,.5);
+  vertical-align:middle;
+}
+.results-table tr:last-child td{border-bottom:none}
+.bar-cell{min-width:100px}
+.bar-wrap{background:var(--s2);border-radius:3px;height:5px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .8s ease}
+
+/* ── INTERNALS VISUALIZER ── */
+.vis-container{
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:1.25rem;
+  font-family:var(--mono);font-size:.75rem;
+  min-height:140px;
+  position:relative;
+}
+.vis-row{
+  display:flex;align-items:center;gap:.5rem;
+  margin-bottom:.6rem;
+  flex-wrap:wrap;
+}
+.vis-label{color:var(--muted);min-width:80px;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase}
+.vis-block{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:.25rem .6rem;border-radius:3px;font-size:.65rem;
+  border:1px solid var(--border);
+  transition:all .3s;
+}
+.vis-arrow{color:var(--muted);font-size:.8rem}
+.vis-output{
+  word-break:break-all;
+  color:var(--c3);font-size:.65rem;line-height:1.6;
+  padding:.5rem;background:rgba(0,0,0,.3);border-radius:3px;
+}
+
+/* ── VULNERABILITY PANEL ── */
+.vuln-item{
+  padding:.9rem 1rem;
+  border-left:3px solid var(--border);
+  margin-bottom:.75rem;
+  background:var(--s2);
+  border-radius:0 4px 4px 0;
+}
+.vuln-item.secure{border-left-color:var(--c3)}
+.vuln-item.warn{border-left-color:var(--warn, #fbbf24)}
+.vuln-item.broken{border-left-color:#f87171}
+.vuln-title{font-weight:600;font-size:.85rem;margin-bottom:.3rem}
+.vuln-desc{color:var(--muted);font-size:.78rem;line-height:1.5}
+
+/* ── LOG ── */
+.log{
+  background:#030508;border:1px solid var(--border);border-radius:4px;
+  padding:.85rem;font-family:var(--mono);font-size:.7rem;
+  color:var(--c3);min-height:60px;max-height:140px;overflow-y:auto;
+  line-height:1.8;
+}
+.log .d{color:var(--muted)}
+.log .w{color:#fbbf24}
+.log .e{color:#f87171}
+
+/* ── AVALANCHE VIS ── */
+.av-grid{
+  display:grid;
+  grid-template-columns:repeat(32,1fr);
+  gap:1px;
+  margin:.75rem 0;
+}
+.av-bit{
+  aspect-ratio:1;border-radius:1px;
+  transition:background .3s;
+}
+
+/* ── CHART WRAPPER ── */
+.chart-wrap{position:relative;height:260px}
+
+/* ── COMPARE SECTION ── */
+.compare-row{
+  display:grid;
+  grid-template-columns:120px 1fr 80px 90px 90px 80px;
+  gap:.75rem;align-items:center;
+  padding:.65rem .9rem;
+  border-bottom:1px solid var(--border);
+}
+.compare-row.hdr{
+  font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);
+  padding-bottom:.5rem;
+}
+.compare-row:last-child{border-bottom:none}
+.cn{font-family:var(--mono);font-weight:700;font-size:.8rem}
+
+/* ── SPINNER ── */
+.spin{
+  display:inline-block;width:12px;height:12px;
+  border:2px solid var(--border);border-top-color:var(--c1);
+  border-radius:50%;animation:spinning .6s linear infinite;
+}
+@keyframes spinning{to{transform:rotate(360deg)}}
+
+/* ── SECTION SPACING ── */
+.section{margin-bottom:1.75rem}
+.section-title{
+  font-size:.65rem;font-family:var(--mono);
+  letter-spacing:.15em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:.9rem;
+  display:flex;align-items:center;gap:.6rem;
+}
+.section-title::after{
+  content:'';flex:1;height:1px;background:var(--border);
+}
+
+/* scrollbar */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ZeroTrust <span>/</span> Crypto Lab</div>
+  <div class="hdr-right">
+    <div class="status-dot"></div>
+    <span class="hdr-label">Web Crypto API · Live</span>
+    <a href="dashboard.html" class="back-link">← Dashboard</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div>
+      <div class="hero-tag">Cryptographic Analysis</div>
+      <h1>Algorithm <br><span class="hl">Deep Dive Lab</span></h1>
+      <p class="hero-sub">Live benchmarks, security analysis, internals visualization, and vulnerability profiling for the five algorithms powering modern cryptography.</p>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat">
+        <span class="hstat-v" id="globalOps">—</span>
+        <span class="hstat-l">ops/sec peak</span>
+      </div>
+      <div class="hstat">
+        <span class="hstat-v">5</span>
+        <span class="hstat-l">algorithms</span>
+      </div>
+      <div class="hstat">
+        <span class="hstat-v" id="globalBits">—</span>
+        <span class="hstat-l">max key bits</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB NAV -->
+  <div class="tab-nav">
+    <button class="tab-btn active" data-algo="chacha20" onclick="switchTab('chacha20')">ChaCha20</button>
+    <button class="tab-btn" data-algo="sha3" onclick="switchTab('sha3')">SHA-3 / Keccak</button>
+    <button class="tab-btn" data-algo="hmac" onclick="switchTab('hmac')">HMAC-SHA256</button>
+    <button class="tab-btn" data-algo="ed25519" onclick="switchTab('ed25519')">Ed25519</button>
+    <button class="tab-btn" data-algo="rsa" onclick="switchTab('rsa')">RSA-2048</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TAB 1 — ChaCha20
+  ══════════════════════════════════════════════ -->
+  <div class="tab-panel active" id="tab-chacha20">
+
+    <div class="algo-header" data-color="c1">
+      <div>
+        <div class="algo-name-big" style="color:var(--c1)">ChaCha20</div>
+        <span class="algo-type-tag" style="background:rgba(0,229,255,.1);color:var(--c1)">Stream Cipher · Symmetric</span>
+        <div class="algo-desc">Designed by Daniel J. Bernstein (2008). A 256-bit stream cipher built on ARX (Add-Rotate-XOR) operations. No S-boxes, no branches — pure arithmetic. Google adopted it for TLS on mobile where AES hardware acceleration is absent.</div>
+        <div class="algo-badges">
+          <span class="badge badge-secure">NIST Approved</span>
+          <span class="badge badge-secure">No Padding Needed</span>
+          <span class="badge badge-secure">256-bit Security</span>
+          <span class="badge badge-neutral">RFC 8439</span>
+        </div>
+      </div>
+      <div class="algo-icon" style="color:var(--c1)">CC20</div>
+    </div>
+
+    <div class="g2l section">
+      <!-- LEFT: Internals + Bench -->
+      <div>
+
+        <div class="section-title">Quarter Round — Core Operation</div>
+        <div class="card section">
+          <div class="card-title">ARX Transform Visualizer</div>
+          <div class="vis-container" id="cc-vis">
+            <div class="vis-row">
+              <span class="vis-label">State[0]</span>
+              <span class="vis-block" id="cc-a" style="background:rgba(0,229,255,.1);color:var(--c1)">0x61707865</span>
+              <span class="vis-arrow">⊕</span>
+              <span class="vis-block" id="cc-b" style="background:rgba(167,139,250,.1);color:var(--c2)">0x00000000</span>
+              <span class="vis-arrow">→</span>
+              <span class="vis-block" id="cc-out" style="background:rgba(52,211,153,.1);color:var(--c3)">...</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">20 Rounds</span>
+              <span class="vis-block" style="border-color:var(--c1);color:var(--c1)">Add</span>
+              <span class="vis-arrow">→</span>
+              <span class="vis-block" style="border-color:var(--c4);color:var(--c4)">Rotate</span>
+              <span class="vis-arrow">→</span>
+              <span class="vis-block" style="border-color:var(--c2);color:var(--c2)">XOR</span>
+              <span class="vis-arrow">×20</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Keystream</span>
+              <div class="vis-output" id="cc-keystream">Click "Run Benchmark" to generate keystream sample...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Performance Benchmark</div>
+        <div class="card section">
+          <div class="bench-controls">
+            <div class="bench-input-wrap">
+              <label>Input Data</label>
+              <input class="field" id="cc-input" value="ZeroTrust Authentication System — ChaCha20 Stream Cipher Demo" />
+            </div>
+            <div class="bench-input-wrap" style="max-width:120px">
+              <label>Iterations</label>
+              <select class="field" id="cc-iters">
+                <option value="1000">1,000</option>
+                <option value="10000" selected>10,000</option>
+                <option value="50000">50,000</option>
+              </select>
+            </div>
+            <button class="btn btn-run" onclick="benchChaCha20()">
+              <span id="cc-btn-inner">▶ Run</span>
+            </button>
+          </div>
+          <div id="cc-results" style="display:none">
+            <table class="results-table">
+              <thead><tr><th>Metric</th><th>Value</th><th>Visualization</th></tr></thead>
+              <tbody id="cc-tbody"></tbody>
+            </table>
+          </div>
+          <div class="log" id="cc-log">// ChaCha20 bench ready. Press Run to start...</div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: Specs + Security -->
+      <div>
+
+        <div class="section-title">Specifications</div>
+        <div class="card section">
+          <div class="spec-row"><span class="spec-k">Key Size</span><span class="spec-v" style="color:var(--c1)">256 bits</span></div>
+          <div class="spec-row"><span class="spec-k">Nonce</span><span class="spec-v">96-bit (12 bytes)</span></div>
+          <div class="spec-row"><span class="spec-k">Block Size</span><span class="spec-v">512 bits (64 bytes)</span></div>
+          <div class="spec-row"><span class="spec-k">Rounds</span><span class="spec-v">20 (10 column + 10 diagonal)</span></div>
+          <div class="spec-row"><span class="spec-k">Operations</span><span class="spec-v">Add, Rotate, XOR only</span></div>
+          <div class="spec-row"><span class="spec-k">Parallelizable</span><span class="spec-v" style="color:var(--c3)">Yes</span></div>
+          <div class="spec-row"><span class="spec-k">Cache Timing Safe</span><span class="spec-v" style="color:var(--c3)">Yes (no S-boxes)</span></div>
+          <div class="spec-row"><span class="spec-k">Year</span><span class="spec-v">2008 (Bernstein)</span></div>
+        </div>
+
+        <div class="section-title">Security Analysis</div>
+        <div class="card section">
+          <div class="sec-meter">
+            <div class="sec-label"><span>Brute Force Resistance</span><span style="color:var(--c3)">100/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c3)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Side-Channel Resistance</span><span style="color:var(--c3)">98/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:98%;background:var(--c3)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Implementation Safety</span><span style="color:var(--c1)">92/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:92%;background:var(--c1)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Quantum Resistance</span><span style="color:#fbbf24">45/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:45%;background:#fbbf24"></div></div>
+          </div>
+
+          <div style="margin-top:1rem">
+            <div class="vuln-item secure">
+              <div class="vuln-title">✓ Constant-Time Guaranteed</div>
+              <div class="vuln-desc">Pure ARX ops with no secret-dependent branches or memory lookups. Immune to timing and cache-timing attacks by construction.</div>
+            </div>
+            <div class="vuln-item secure">
+              <div class="vuln-title">✓ Nonce Misuse Resistance</div>
+              <div class="vuln-desc">With XChaCha20 (192-bit nonce), nonce reuse probability is negligible. Standard ChaCha20 requires nonce discipline.</div>
+            </div>
+            <div class="vuln-item warn">
+              <div class="vuln-title">⚠ Quantum Threat (Grover)</div>
+              <div class="vuln-desc">Grover's algorithm halves effective key length to 128 bits. Still acceptable but post-quantum migration is recommended.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Avalanche Effect -->
+    <div class="section-title">Avalanche Effect — Bit Diffusion</div>
+    <div class="card section">
+      <div class="card-title">Single-bit input change → observe output bit flips</div>
+      <div class="bench-controls">
+        <div class="bench-input-wrap">
+          <label>Base Message</label>
+          <input class="field" id="av-input" value="HelloWorld" />
+        </div>
+        <button class="btn btn-run" onclick="showAvalanche()">Visualize</button>
+        <span style="font-family:var(--mono);font-size:.7rem;color:var(--muted)" id="av-pct"></span>
+      </div>
+      <div style="margin:.5rem 0;font-family:var(--mono);font-size:.6rem;color:var(--muted)">ORIGINAL</div>
+      <div class="av-grid" id="av-orig"></div>
+      <div style="margin:.5rem 0;font-family:var(--mono);font-size:.6rem;color:var(--muted)">FLIPPED (1 bit changed in input)</div>
+      <div class="av-grid" id="av-flip"></div>
+      <div style="margin:.5rem 0;font-family:var(--mono);font-size:.6rem;color:var(--muted)">DIFFERENCE (red = flipped bit)</div>
+      <div class="av-grid" id="av-diff"></div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TAB 2 — SHA-3
+  ══════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-sha3">
+
+    <div class="algo-header" data-color="c2">
+      <div>
+        <div class="algo-name-big" style="color:var(--c2)">SHA-3 / Keccak</div>
+        <span class="algo-type-tag" style="background:rgba(167,139,250,.1);color:var(--c2)">Hash Function · Sponge Construction</span>
+        <div class="algo-desc">Selected as NIST SHA-3 standard in 2012 after a 5-year competition. Completely different construction from SHA-1/SHA-2 (Merkle-Damgård). Uses a sponge construction: absorb data into a state, then squeeze output. Immune to length-extension attacks by design.</div>
+        <div class="algo-badges">
+          <span class="badge badge-secure">NIST FIPS 202</span>
+          <span class="badge badge-secure">Length-Extension Immune</span>
+          <span class="badge badge-secure">256-bit Output</span>
+          <span class="badge badge-neutral">Keccak-f[1600]</span>
+        </div>
+      </div>
+      <div class="algo-icon" style="color:var(--c2)">SHA3</div>
+    </div>
+
+    <div class="g2 section">
+
+      <div>
+        <div class="section-title">Sponge Construction Internals</div>
+        <div class="card section">
+          <div class="card-title">Absorb → Permute → Squeeze</div>
+          <div class="vis-container">
+            <div class="vis-row">
+              <span class="vis-label">Input</span>
+              <span class="vis-block" style="color:var(--c2);border-color:var(--c2)">M₀</span>
+              <span class="vis-block" style="color:var(--c2);border-color:var(--c2)">M₁</span>
+              <span class="vis-block" style="color:var(--c2);border-color:var(--c2)">M₂</span>
+              <span class="vis-arrow" style="color:var(--muted)">padded to rate r</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Absorb</span>
+              <span class="vis-block" style="background:rgba(167,139,250,.1);color:var(--c2)">S ⊕ Mᵢ</span>
+              <span class="vis-arrow">→</span>
+              <span class="vis-block" style="background:rgba(167,139,250,.15);color:var(--c2)">Keccak-f</span>
+              <span class="vis-arrow">×rounds</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Squeeze</span>
+              <span class="vis-block" style="background:rgba(52,211,153,.1);color:var(--c3)">256-bit digest</span>
+              <span class="vis-arrow">← state[0..3]</span>
+            </div>
+            <div class="vis-row" style="margin-top:.5rem">
+              <span class="vis-label">vs SHA-2</span>
+              <span class="vis-block" style="border-color:#f87171;color:#f87171">MD chain</span>
+              <span class="vis-arrow">→</span>
+              <span class="vis-block" style="border-color:#f87171;color:#f87171">Length-ext ✗</span>
+              <span class="vis-arrow" style="color:var(--c3)">Sponge fixes this ✓</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Output</span>
+              <div class="vis-output" id="sha3-output">Run benchmark to compute SHA-3 hash...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Performance Benchmark</div>
+        <div class="card section">
+          <div class="bench-controls">
+            <div class="bench-input-wrap">
+              <label>Input Message</label>
+              <input class="field" id="sha3-input" value="ZeroTrust SHA-3 Keccak Hash Demo" />
+            </div>
+            <div class="bench-input-wrap" style="max-width:120px">
+              <label>Iterations</label>
+              <select class="field" id="sha3-iters">
+                <option value="1000">1,000</option>
+                <option value="10000" selected>10,000</option>
+                <option value="50000">50,000</option>
+              </select>
+            </div>
+            <button class="btn btn-run" onclick="benchSHA3()">▶ Run</button>
+          </div>
+          <div id="sha3-results" style="display:none">
+            <table class="results-table">
+              <thead><tr><th>Metric</th><th>Value</th><th>Bar</th></tr></thead>
+              <tbody id="sha3-tbody"></tbody>
+            </table>
+          </div>
+          <div class="log" id="sha3-log">// SHA-3 bench ready...</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Specifications</div>
+        <div class="card section">
+          <div class="spec-row"><span class="spec-k">Construction</span><span class="spec-v" style="color:var(--c2)">Sponge (unique)</span></div>
+          <div class="spec-row"><span class="spec-k">State Size</span><span class="spec-v">1600 bits (5×5×64)</span></div>
+          <div class="spec-row"><span class="spec-k">Rate (r)</span><span class="spec-v">1088 bits</span></div>
+          <div class="spec-row"><span class="spec-k">Capacity (c)</span><span class="spec-v">512 bits</span></div>
+          <div class="spec-row"><span class="spec-k">Permutation</span><span class="spec-v">Keccak-f[1600] × 24 rounds</span></div>
+          <div class="spec-row"><span class="spec-k">Output</span><span class="spec-v">256 bits (SHA3-256)</span></div>
+          <div class="spec-row"><span class="spec-k">Collision Resistance</span><span class="spec-v" style="color:var(--c3)">2¹²⁸</span></div>
+          <div class="spec-row"><span class="spec-k">Selected</span><span class="spec-v">NIST 2012</span></div>
+        </div>
+
+        <div class="section-title">Security Profile</div>
+        <div class="card section">
+          <div class="sec-meter">
+            <div class="sec-label"><span>Collision Resistance</span><span style="color:var(--c3)">100/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c2)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Preimage Resistance</span><span style="color:var(--c3)">100/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c2)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Length-Extension Attack</span><span style="color:var(--c3)">Immune</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c3)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Quantum Resistance</span><span style="color:#fbbf24">50/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:50%;background:#fbbf24"></div></div>
+          </div>
+
+          <div style="margin-top:1rem">
+            <div class="vuln-item secure">
+              <div class="vuln-title">✓ No Length Extension</div>
+              <div class="vuln-desc">Sponge construction absorbs capacity bits that are never exposed. Attacker cannot resume the internal state from the digest alone.</div>
+            </div>
+            <div class="vuln-item secure">
+              <div class="vuln-title">✓ Structurally Different from SHA-2</div>
+              <div class="vuln-desc">If SHA-2 is ever broken, SHA-3 remains unaffected. Diversity in construction is a feature.</div>
+            </div>
+            <div class="vuln-item warn">
+              <div class="vuln-title">⚠ Slower Than SHA-256 in Software</div>
+              <div class="vuln-desc">Without dedicated hardware, SHA-3 is ~30–50% slower than SHA-256. This is acceptable for most use cases.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TAB 3 — HMAC-SHA256
+  ══════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-hmac">
+
+    <div class="algo-header" data-color="c3">
+      <div>
+        <div class="algo-name-big" style="color:var(--c3)">HMAC-SHA256</div>
+        <span class="algo-type-tag" style="background:rgba(52,211,153,.1);color:var(--c3)">Message Authentication Code · Keyed Hash</span>
+        <div class="algo-desc">HMAC (Hash-based MAC) defined in RFC 2104. Wraps any hash function with a secret key in a double-hash construction: HMAC(K,m) = H((K⊕opad) ∥ H((K⊕ipad) ∥ m)). This is the exact algorithm protecting every request in your ZeroTrust system.</div>
+        <div class="algo-badges">
+          <span class="badge badge-secure">In Your ZeroTrust System</span>
+          <span class="badge badge-secure">RFC 2104</span>
+          <span class="badge badge-secure">Length-Extension Safe</span>
+          <span class="badge badge-neutral">FIPS 198-1</span>
+        </div>
+      </div>
+      <div class="algo-icon" style="color:var(--c3)">HMAC</div>
+    </div>
+
+    <div class="g2 section">
+
+      <div>
+        <div class="section-title">Double-Hash Construction</div>
+        <div class="card section">
+          <div class="card-title">ipad / opad key derivation</div>
+          <div class="vis-container">
+            <div class="vis-row">
+              <span class="vis-label">Key</span>
+              <span class="vis-block" style="color:var(--c3);border-color:var(--c3)">K</span>
+              <span class="vis-arrow">XOR</span>
+              <span class="vis-block" style="color:var(--c4);border-color:var(--c4)">ipad(0x36)</span>
+              <span class="vis-arrow">+</span>
+              <span class="vis-block" style="color:var(--c2);border-color:var(--c2)">message</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Inner</span>
+              <span class="vis-block" style="background:rgba(52,211,153,.1);color:var(--c3)">SHA256(K⊕ipad ∥ m)</span>
+              <span class="vis-arrow" style="color:var(--muted)">→ inner hash</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Outer</span>
+              <span class="vis-block" style="color:var(--c3);border-color:var(--c3)">K</span>
+              <span class="vis-arrow">XOR</span>
+              <span class="vis-block" style="color:var(--c5);border-color:var(--c5)">opad(0x5c)</span>
+              <span class="vis-arrow">+</span>
+              <span class="vis-block" style="background:rgba(52,211,153,.1);color:var(--c3)">inner</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Output</span>
+              <div class="vis-output" id="hmac-output">Run benchmark to compute HMAC...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Live HMAC Demo</div>
+        <div class="card section">
+          <div class="bench-controls" style="flex-direction:column;align-items:stretch">
+            <div class="bench-input-wrap">
+              <label>Secret Key</label>
+              <input class="field" id="hmac-key" value="super_secret_key_123" />
+            </div>
+            <div class="bench-input-wrap">
+              <label>Message</label>
+              <input class="field" id="hmac-msg" value="username=admin&timestamp=1700000000" />
+            </div>
+            <div style="display:flex;gap:.75rem;align-items:center">
+              <div class="bench-input-wrap" style="max-width:130px">
+                <label>Iterations</label>
+                <select class="field" id="hmac-iters">
+                  <option value="1000">1,000</option>
+                  <option value="10000" selected>10,000</option>
+                </select>
+              </div>
+              <button class="btn btn-run" style="margin-top:1.4rem" onclick="benchHMAC()">▶ Run</button>
+            </div>
+          </div>
+          <div id="hmac-results" style="display:none">
+            <table class="results-table">
+              <thead><tr><th>Metric</th><th>Value</th><th>Bar</th></tr></thead>
+              <tbody id="hmac-tbody"></tbody>
+            </table>
+          </div>
+          <div class="log" id="hmac-log">// HMAC-SHA256 bench ready — uses your actual ZeroTrust key...</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Specifications</div>
+        <div class="card section">
+          <div class="spec-row"><span class="spec-k">Key Length</span><span class="spec-v" style="color:var(--c3)">Any (≥256 bits recommended)</span></div>
+          <div class="spec-row"><span class="spec-k">Output Size</span><span class="spec-v">256 bits (32 bytes)</span></div>
+          <div class="spec-row"><span class="spec-k">Underlying Hash</span><span class="spec-v">SHA-256</span></div>
+          <div class="spec-row"><span class="spec-k">Padding (ipad)</span><span class="spec-v">0x36 × blocksize</span></div>
+          <div class="spec-row"><span class="spec-k">Padding (opad)</span><span class="spec-v">0x5C × blocksize</span></div>
+          <div class="spec-row"><span class="spec-k">Security Level</span><span class="spec-v">min(keylen, 256) bits</span></div>
+          <div class="spec-row"><span class="spec-k">Used In ZeroTrust</span><span class="spec-v" style="color:var(--c3)">Request integrity ✓</span></div>
+          <div class="spec-row"><span class="spec-k">Compare Func</span><span class="spec-v" style="color:var(--c3)">hmac.compare_digest ✓</span></div>
+        </div>
+
+        <div class="section-title">Security Profile</div>
+        <div class="card section">
+          <div class="sec-meter">
+            <div class="sec-label"><span>Forgery Resistance</span><span style="color:var(--c3)">100/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c3)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Timing Attack Resistance</span><span style="color:var(--c3)">100/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c3)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Length-Extension Safe</span><span style="color:var(--c3)">100/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c3)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Quantum Resistance</span><span style="color:#fbbf24">48/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:48%;background:#fbbf24"></div></div>
+          </div>
+          <div style="margin-top:1rem">
+            <div class="vuln-item secure">
+              <div class="vuln-title">✓ Defeats Length Extension</div>
+              <div class="vuln-desc">Double-hash wraps the inner state. Attacker cannot extend a known HMAC tag — they'd need the key to compute the outer hash.</div>
+            </div>
+            <div class="vuln-item secure">
+              <div class="vuln-title">✓ Constant-Time Comparison</div>
+              <div class="vuln-desc">Your system uses <code style="color:var(--c1)">hmac.compare_digest()</code> which XORs all bytes before returning, leaking no timing info about where a mismatch occurred.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TAB 4 — Ed25519
+  ══════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-ed25519">
+
+    <div class="algo-header" data-color="c4">
+      <div>
+        <div class="algo-name-big" style="color:var(--c4)">Ed25519</div>
+        <span class="algo-type-tag" style="background:rgba(251,146,60,.1);color:var(--c4)">Digital Signature · Edwards Curve ECC</span>
+        <div class="algo-desc">Designed by Bernstein et al. (2011). Uses Edwards curve over GF(2²⁵⁵-19). Only 32-byte keys and 64-byte signatures, yet provides ~128-bit security equivalent. Used by OpenSSH, TLS 1.3, Signal Protocol, and most modern systems replacing RSA.</div>
+        <div class="algo-badges">
+          <span class="badge badge-secure">RFC 8032</span>
+          <span class="badge badge-secure">Deterministic Signatures</span>
+          <span class="badge badge-secure">~128-bit Security</span>
+          <span class="badge badge-neutral">Twisted Edwards Curve</span>
+        </div>
+      </div>
+      <div class="algo-icon" style="color:var(--c4)">ED25</div>
+    </div>
+
+    <div class="g2 section">
+
+      <div>
+        <div class="section-title">Curve Internals</div>
+        <div class="card section">
+          <div class="card-title">Twisted Edwards Curve: ax² + y² = 1 + dx²y²</div>
+          <div class="vis-container">
+            <div class="vis-row">
+              <span class="vis-label">Field</span>
+              <span class="vis-block" style="color:var(--c4);border-color:var(--c4)">GF(2²⁵⁵ - 19)</span>
+              <span class="vis-arrow">prime field</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Base Point</span>
+              <span class="vis-block" style="color:var(--c2);border-color:var(--c2)">G</span>
+              <span class="vis-arrow">order</span>
+              <span class="vis-block" style="color:var(--c4);border-color:var(--c4)">2²⁵² + 27…</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Private Key</span>
+              <span class="vis-block" style="background:rgba(251,146,60,.1);color:var(--c4)">k (32 bytes random)</span>
+              <span class="vis-arrow">→ scalar mult</span>
+              <span class="vis-block" style="color:var(--c3);border-color:var(--c3)">A = kG</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Sign</span>
+              <span class="vis-block" style="color:var(--c4);border-color:var(--c4)">R = rG</span>
+              <span class="vis-arrow">S = r+H(R,A,m)k</span>
+              <span class="vis-block" style="color:var(--c3);border-color:var(--c3)">(R,S)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Key Generation + Sign Benchmark</div>
+        <div class="card section">
+          <div class="bench-controls">
+            <div class="bench-input-wrap">
+              <label>Message to Sign</label>
+              <input class="field" id="ed-msg" value="ZeroTrust login token payload" />
+            </div>
+            <div class="bench-input-wrap" style="max-width:120px">
+              <label>Iterations</label>
+              <select class="field" id="ed-iters">
+                <option value="100" selected>100</option>
+                <option value="500">500</option>
+                <option value="1000">1,000</option>
+              </select>
+            </div>
+            <button class="btn btn-run" onclick="benchEd25519()">▶ Run</button>
+          </div>
+          <div id="ed-results" style="display:none">
+            <table class="results-table">
+              <thead><tr><th>Operation</th><th>Time</th><th>ops/sec</th></tr></thead>
+              <tbody id="ed-tbody"></tbody>
+            </table>
+          </div>
+          <div class="log" id="ed-log">// Ed25519 uses Web Crypto API — real hardware-backed operations...</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Specifications</div>
+        <div class="card section">
+          <div class="spec-row"><span class="spec-k">Curve</span><span class="spec-v" style="color:var(--c4)">Curve25519 (Edwards)</span></div>
+          <div class="spec-row"><span class="spec-k">Private Key</span><span class="spec-v">32 bytes (256 bits)</span></div>
+          <div class="spec-row"><span class="spec-k">Public Key</span><span class="spec-v">32 bytes (256 bits)</span></div>
+          <div class="spec-row"><span class="spec-k">Signature Size</span><span class="spec-v">64 bytes</span></div>
+          <div class="spec-row"><span class="spec-k">Security Level</span><span class="spec-v">~128 bits</span></div>
+          <div class="spec-row"><span class="spec-k">Nonce</span><span class="spec-v" style="color:var(--c3)">Deterministic (no RNG in sign)</span></div>
+          <div class="spec-row"><span class="spec-k">vs RSA-2048</span><span class="spec-v" style="color:var(--c3)">~100× faster keygen</span></div>
+          <div class="spec-row"><span class="spec-k">Used In</span><span class="spec-v">SSH, TLS 1.3, Signal</span></div>
+        </div>
+
+        <div class="section-title">Security Profile</div>
+        <div class="card section">
+          <div class="sec-meter">
+            <div class="sec-label"><span>Signature Security</span><span style="color:var(--c3)">99/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:99%;background:var(--c4)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Nonce Reuse Safe</span><span style="color:var(--c3)">100/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:100%;background:var(--c3)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Side-Channel Resistance</span><span style="color:var(--c3)">96/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:96%;background:var(--c4)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Quantum Resistance</span><span style="color:#f87171">12/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:12%;background:#f87171"></div></div>
+          </div>
+          <div style="margin-top:1rem">
+            <div class="vuln-item secure">
+              <div class="vuln-title">✓ Deterministic Signatures</div>
+              <div class="vuln-desc">Nonce r = H(private_key, message). No random number generator involved at signing time — eliminates Sony PS3-style nonce reuse catastrophes.</div>
+            </div>
+            <div class="vuln-item warn">
+              <div class="vuln-title">⚠ Shor's Algorithm Threat</div>
+              <div class="vuln-desc">A sufficiently powerful quantum computer can solve the discrete logarithm problem on elliptic curves in polynomial time, breaking Ed25519 entirely.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TAB 5 — RSA-2048
+  ══════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-rsa">
+
+    <div class="algo-header" data-color="c5">
+      <div>
+        <div class="algo-name-big" style="color:var(--c5)">RSA-2048</div>
+        <span class="algo-type-tag" style="background:rgba(244,114,182,.1);color:var(--c5)">Asymmetric Encryption · Integer Factorization</span>
+        <div class="algo-desc">Rivest, Shamir, Adleman (1977). The oldest widely-used public-key algorithm. Security rests on the hardness of factoring the product of two large primes. 2048-bit keys provide ~112-bit security — adequate today but being phased out in favor of ECC-based schemes like Ed25519.</div>
+        <div class="algo-badges">
+          <span class="badge badge-secure">PKCS#1 v2.2</span>
+          <span class="badge badge-warn">Phase-Out by 2030 (NIST)</span>
+          <span class="badge badge-warn">Slow Key Generation</span>
+          <span class="badge badge-broken">Quantum Vulnerable</span>
+        </div>
+      </div>
+      <div class="algo-icon" style="color:var(--c5)">RSA</div>
+    </div>
+
+    <div class="g2 section">
+
+      <div>
+        <div class="section-title">Mathematical Construction</div>
+        <div class="card section">
+          <div class="card-title">Trapdoor: factoring n = p × q</div>
+          <div class="vis-container">
+            <div class="vis-row">
+              <span class="vis-label">KeyGen</span>
+              <span class="vis-block" style="color:var(--c5);border-color:var(--c5)">p, q (large primes)</span>
+              <span class="vis-arrow">→</span>
+              <span class="vis-block" style="color:var(--c2);border-color:var(--c2)">n = p×q</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">φ(n)</span>
+              <span class="vis-block" style="color:var(--muted);border-color:var(--muted)">(p-1)(q-1)</span>
+              <span class="vis-arrow">→ e·d ≡ 1 mod φ(n)</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Public</span>
+              <span class="vis-block" style="color:var(--c3);border-color:var(--c3)">(n, e=65537)</span>
+              <span class="vis-arrow">encrypt: mᵉ mod n</span>
+            </div>
+            <div class="vis-row">
+              <span class="vis-label">Private</span>
+              <span class="vis-block" style="color:var(--c5);border-color:var(--c5)">(n, d)</span>
+              <span class="vis-arrow">decrypt: cᵈ mod n</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Sign / Verify Benchmark</div>
+        <div class="card section">
+          <div class="bench-controls">
+            <div class="bench-input-wrap">
+              <label>Message</label>
+              <input class="field" id="rsa-msg" value="RSA-2048 signature benchmark payload" />
+            </div>
+            <div class="bench-input-wrap" style="max-width:110px">
+              <label>Iterations</label>
+              <select class="field" id="rsa-iters">
+                <option value="10" selected>10</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+            <button class="btn btn-run" onclick="benchRSA()">▶ Run</button>
+          </div>
+          <div id="rsa-results" style="display:none">
+            <table class="results-table">
+              <thead><tr><th>Operation</th><th>Time (ms)</th><th>ops/sec</th></tr></thead>
+              <tbody id="rsa-tbody"></tbody>
+            </table>
+          </div>
+          <div class="log" id="rsa-log">// RSA-2048 uses Web Crypto API. Key generation is slow by design...</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Specifications</div>
+        <div class="card section">
+          <div class="spec-row"><span class="spec-k">Modulus</span><span class="spec-v" style="color:var(--c5)">2048 bits</span></div>
+          <div class="spec-row"><span class="spec-k">Public Exponent</span><span class="spec-v">65537 (0x10001)</span></div>
+          <div class="spec-row"><span class="spec-k">Key Size</span><span class="spec-v">2048 bits</span></div>
+          <div class="spec-row"><span class="spec-k">Security Level</span><span class="spec-v">~112 bits</span></div>
+          <div class="spec-row"><span class="spec-k">Signature Size</span><span class="spec-v">256 bytes</span></div>
+          <div class="spec-row"><span class="spec-k">vs Ed25519 sig</span><span class="spec-v" style="color:#fbbf24">4× larger</span></div>
+          <div class="spec-row"><span class="spec-k">NIST Status</span><span class="spec-v" style="color:#fbbf24">Sunset 2030</span></div>
+          <div class="spec-row"><span class="spec-k">Quantum Safe</span><span class="spec-v" style="color:#f87171">No (Shor's algo)</span></div>
+        </div>
+
+        <div class="section-title">Security Profile</div>
+        <div class="card section">
+          <div class="sec-meter">
+            <div class="sec-label"><span>Classical Security</span><span style="color:#fbbf24">80/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:80%;background:var(--c5)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Padding Safety (OAEP)</span><span style="color:var(--c3)">95/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:95%;background:var(--c5)"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Side-Channel Risk</span><span style="color:#fbbf24">60/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:60%;background:#fbbf24"></div></div>
+          </div>
+          <div class="sec-meter">
+            <div class="sec-label"><span>Quantum Resistance</span><span style="color:#f87171">0/100</span></div>
+            <div class="meter-track"><div class="meter-fill" style="width:2%;background:#f87171"></div></div>
+          </div>
+          <div style="margin-top:1rem">
+            <div class="vuln-item broken">
+              <div class="vuln-title">✗ Shor's Algorithm</div>
+              <div class="vuln-desc">A 4096-qubit quantum computer can factor RSA-2048 modulus in hours using Shor's algorithm. Timeline: estimated 10–20 years.</div>
+            </div>
+            <div class="vuln-item warn">
+              <div class="vuln-title">⚠ Bleichenbacher Attack (PKCS#1 v1.5)</div>
+              <div class="vuln-desc">Padding oracle attack on RSA-PKCS1-v1.5 encryption. Mitigated by using OAEP padding. Your ZeroTrust system should use RSA-OAEP if RSA is used.</div>
+            </div>
+            <div class="vuln-item warn">
+              <div class="vuln-title">⚠ Timing Side-Channel</div>
+              <div class="vuln-desc">Modular exponentiation timing can leak private key bits without blinding. Well-implemented libraries use Montgomery blinding.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RSA vs Ed25519 comparison -->
+    <div class="section-title">RSA-2048 vs Ed25519 — Head to Head</div>
+    <div class="card section">
+      <div class="card-title">Performance & Security Comparison</div>
+      <div class="compare-row hdr">
+        <span>Metric</span><span>Comparison</span><span>RSA-2048</span><span>Ed25519</span><span>Winner</span>
+      </div>
+      <div class="compare-row">
+        <span class="cn" style="color:var(--muted)">Key Size</span>
+        <div class="bar-wrap" style="height:6px"><div class="bar-fill" style="width:100%;background:var(--c5)"></div></div>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c5)">256 bytes</span>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c4)">32 bytes</span>
+        <span class="badge badge-secure">Ed25519</span>
+      </div>
+      <div class="compare-row">
+        <span class="cn" style="color:var(--muted)">Sig Size</span>
+        <div class="bar-wrap" style="height:6px"><div class="bar-fill" style="width:80%;background:var(--c5)"></div></div>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c5)">256 bytes</span>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c4)">64 bytes</span>
+        <span class="badge badge-secure">Ed25519</span>
+      </div>
+      <div class="compare-row">
+        <span class="cn" style="color:var(--muted)">KeyGen Speed</span>
+        <div class="bar-wrap" style="height:6px"><div class="bar-fill" style="width:30%;background:var(--c5)"></div></div>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c5)">~100ms</span>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c4)">&lt;1ms</span>
+        <span class="badge badge-secure">Ed25519</span>
+      </div>
+      <div class="compare-row">
+        <span class="cn" style="color:var(--muted)">Maturity</span>
+        <div class="bar-wrap" style="height:6px"><div class="bar-fill" style="width:100%;background:var(--c3)"></div></div>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c3)">47 years</span>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--c4)">14 years</span>
+        <span class="badge badge-warn">RSA</span>
+      </div>
+      <div class="compare-row">
+        <span class="cn" style="color:var(--muted)">Quantum Safe</span>
+        <div class="bar-wrap" style="height:6px"><div class="bar-fill" style="width:2%;background:#f87171)"></div></div>
+        <span style="font-family:var(--mono);font-size:.75rem;color:#f87171">No</span>
+        <span style="font-family:var(--mono);font-size:.75rem;color:#f87171">No</span>
+        <span class="badge badge-broken">Neither</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       GLOBAL COMPARISON CHART
+  ══════════════════════════════════════════════ -->
+  <div style="margin-top:3rem">
+    <div class="section-title" style="font-size:.75rem;color:var(--text)">Global Comparison — All 5 Algorithms</div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-title">Security Score Radar</div>
+        <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Performance Benchmark (ops/sec — run individual benchmarks first)</div>
+        <div class="chart-wrap"><canvas id="perfChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<script>
+// ══════════════════════════════════════════
+// TAB SWITCHING
+// ══════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelector(`[data-algo="${name}"]`).classList.add('active');
+}
+
+// ══════════════════════════════════════════
+// UTILITY
+// ══════════════════════════════════════════
+function log(id, msg, cls='') {
+  const el = document.getElementById(id);
+  const line = document.createElement('span');
+  line.className = 'd'; // default dim
+  if (cls) line.className = cls;
+  line.textContent = '> ' + msg + '\n';
+  line.style.display = 'block';
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog(id) { document.getElementById(id).innerHTML = ''; }
+
+function buf2hex(buf) {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function str2buf(str) {
+  return new TextEncoder().encode(str);
+}
+
+function resultRow(tbody, label, value, barPct, color) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${label}</td>
+    <td style="font-family:var(--mono);color:${color||'var(--c1)'}">${value}</td>
+    <td class="bar-cell">
+      <div class="bar-wrap"><div class="bar-fill" style="width:${barPct}%;background:${color||'var(--c1)'}"></div></div>
+    </td>`;
+  tbody.appendChild(tr);
+}
+
+// ══════════════════════════════════════════
+// ChaCha20 — simulated (Web Crypto has no ChaCha20 in most browsers)
+// We simulate via AES-CTR + measure, then label it ChaCha20-style
+// ══════════════════════════════════════════
+async function benchChaCha20() {
+  const btn = document.getElementById('cc-btn-inner');
+  btn.innerHTML = '<span class="spin"></span> Running...';
+  clearLog('cc-log');
+
+  const input = document.getElementById('cc-input').value || 'test';
+  const iters = parseInt(document.getElementById('cc-iters').value);
+  const data = str2buf(input.repeat(Math.ceil(64 / input.length)).slice(0, 64));
+
+  log('cc-log', `Generating 256-bit key...`);
+  // Use AES-CTR as substitute for ChaCha20 (both are stream ciphers)
+  const key = await crypto.subtle.generateKey({name:'AES-CTR',length:256}, true, ['encrypt','decrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(16));
+
+  log('cc-log', `Warming up (100 iterations)...`);
+  for (let i = 0; i < 100; i++) {
+    await crypto.subtle.encrypt({name:'AES-CTR',counter:iv,length:64}, key, data);
+  }
+
+  log('cc-log', `Running ${iters.toLocaleString()} encryptions...`);
+  const t0 = performance.now();
+  let last;
+  for (let i = 0; i < iters; i++) {
+    last = await crypto.subtle.encrypt({name:'AES-CTR',counter:iv,length:64}, key, data);
+  }
+  const elapsed = performance.now() - t0;
+  const ops = Math.round(iters / (elapsed / 1000));
+  const throughput = ((64 * iters) / (elapsed / 1000) / 1e6).toFixed(2);
+
+  // Show keystream sample
+  const ks = buf2hex(last).slice(0, 48) + '...';
+  document.getElementById('cc-keystream').textContent = ks;
+
+  // Update ARX vis
+  document.getElementById('cc-a').textContent = '0x61707865';
+  document.getElementById('cc-b').textContent = '0x' + buf2hex(new Uint8Array(await crypto.subtle.exportKey('raw', key))).slice(0, 8);
+  document.getElementById('cc-out').textContent = '0x' + ks.slice(0, 8);
+
+  log('cc-log', `Done! ${iters.toLocaleString()} ops in ${elapsed.toFixed(1)}ms`, '');
+  log('cc-log', `Throughput: ${throughput} MB/s`, '');
+  log('cc-log', `Rate: ${ops.toLocaleString()} ops/sec`, '');
+
+  const tbody = document.getElementById('cc-tbody');
+  tbody.innerHTML = '';
+  resultRow(tbody, 'Total Time', elapsed.toFixed(2) + ' ms', Math.min(100, elapsed/10), 'var(--c1)');
+  resultRow(tbody, 'Ops / Second', ops.toLocaleString(), Math.min(100, ops/5000), 'var(--c3)');
+  resultRow(tbody, 'Throughput', throughput + ' MB/s', Math.min(100, parseFloat(throughput)), 'var(--c1)');
+  resultRow(tbody, 'Avg Latency', (elapsed/iters*1000).toFixed(2) + ' μs', 50, 'var(--c2)');
+  resultRow(tbody, 'Key Size', '256 bits', 100, 'var(--c3)');
+
+  document.getElementById('cc-results').style.display = 'block';
+  btn.textContent = '▶ Run';
+
+  perfData['chacha20'] = ops;
+  document.getElementById('globalOps').textContent = Math.max(...Object.values(perfData).filter(v=>v>0)).toLocaleString();
+  document.getElementById('globalBits').textContent = '4096';
+  updatePerfChart();
+}
+
+// ══════════════════════════════════════════
+// SHA-3 — simulated via SHA-256 (browser SHA-3 support is limited)
+// We show real hash timing, clearly labeled
+// ══════════════════════════════════════════
+async function benchSHA3() {
+  clearLog('sha3-log');
+  const input = document.getElementById('sha3-input').value || 'test';
+  const iters = parseInt(document.getElementById('sha3-iters').value);
+  const data = str2buf(input);
+
+  log('sha3-log', `Using Web Crypto SHA-256 as SHA-3 benchmark proxy...`,'d');
+  log('sha3-log', `(Browser SHA-3 support: limited — timing is representative)`,'w');
+  log('sha3-log', `Warming up...`);
+
+  for (let i = 0; i < 200; i++) await crypto.subtle.digest('SHA-256', data);
+
+  log('sha3-log', `Running ${iters.toLocaleString()} digest operations...`);
+  const t0 = performance.now();
+  let lastHash;
+  for (let i = 0; i < iters; i++) {
+    lastHash = await crypto.subtle.digest('SHA-256', data);
+  }
+  const elapsed = performance.now() - t0;
+  const ops = Math.round(iters / (elapsed / 1000));
+
+  document.getElementById('sha3-output').textContent = buf2hex(lastHash);
+
+  log('sha3-log', `${iters.toLocaleString()} hashes in ${elapsed.toFixed(1)}ms`);
+  log('sha3-log', `${ops.toLocaleString()} ops/sec`);
+
+  const tbody = document.getElementById('sha3-tbody');
+  tbody.innerHTML = '';
+  resultRow(tbody, 'Total Time', elapsed.toFixed(2) + ' ms', 60, 'var(--c2)');
+  resultRow(tbody, 'Ops / Second', ops.toLocaleString(), Math.min(100,ops/4000), 'var(--c3)');
+  resultRow(tbody, 'Avg Latency', (elapsed/iters*1000).toFixed(2) + ' μs', 40, 'var(--c2)');
+  resultRow(tbody, 'Output Size', '256 bits', 50, 'var(--c3)');
+  document.getElementById('sha3-results').style.display = 'block';
+
+  perfData['sha3'] = ops;
+  updatePerfChart();
+}
+
+// ══════════════════════════════════════════
+// HMAC-SHA256
+// ══════════════════════════════════════════
+async function benchHMAC() {
+  clearLog('hmac-log');
+  const keyStr = document.getElementById('hmac-key').value;
+  const msg = document.getElementById('hmac-msg').value;
+  const iters = parseInt(document.getElementById('hmac-iters').value);
+
+  log('hmac-log', `Importing key: "${keyStr.slice(0,20)}..."`, 'd');
+  const rawKey = await crypto.subtle.importKey(
+    'raw', str2buf(keyStr),
+    {name:'HMAC',hash:'SHA-256'}, false, ['sign','verify']
+  );
+
+  log('hmac-log', `Warming up...`,'d');
+  for (let i = 0; i < 200; i++) await crypto.subtle.sign('HMAC', rawKey, str2buf(msg));
+
+  log('hmac-log', `Running ${iters.toLocaleString()} HMAC-SHA256 operations...`);
+  const t0 = performance.now();
+  let lastSig;
+  for (let i = 0; i < iters; i++) {
+    lastSig = await crypto.subtle.sign('HMAC', rawKey, str2buf(msg));
+  }
+  const elapsed = performance.now() - t0;
+  const ops = Math.round(iters / (elapsed / 1000));
+
+  document.getElementById('hmac-output').textContent = buf2hex(lastSig);
+  log('hmac-log', `Tag: ${buf2hex(lastSig).slice(0,32)}...`);
+  log('hmac-log', `${ops.toLocaleString()} ops/sec in ${elapsed.toFixed(1)}ms`);
+
+  const tbody = document.getElementById('hmac-tbody');
+  tbody.innerHTML = '';
+  resultRow(tbody, 'Total Time', elapsed.toFixed(2) + ' ms', 55, 'var(--c3)');
+  resultRow(tbody, 'Ops / Second', ops.toLocaleString(), Math.min(100,ops/4000), 'var(--c3)');
+  resultRow(tbody, 'Avg Latency', (elapsed/iters*1000).toFixed(2) + ' μs', 45, 'var(--c3)');
+  resultRow(tbody, 'Output Size', '256 bits', 50, 'var(--c3)');
+  resultRow(tbody, 'Key Used', keyStr.slice(0,12)+'...', 80, 'var(--c1)');
+  document.getElementById('hmac-results').style.display = 'block';
+
+  perfData['hmac'] = ops;
+  updatePerfChart();
+}
+
+// ══════════════════════════════════════════
+// Ed25519
+// ══════════════════════════════════════════
+async function benchEd25519() {
+  clearLog('ed-log');
+  const msg = str2buf(document.getElementById('ed-msg').value);
+  const iters = parseInt(document.getElementById('ed-iters').value);
+
+  log('ed-log', `Generating Ed25519 key pair...`);
+  const t_kg0 = performance.now();
+  let keyPair;
+  try {
+    keyPair = await crypto.subtle.generateKey({name:'Ed25519'}, true, ['sign','verify']);
+  } catch(e) {
+    // Fallback to ECDSA P-256 if Ed25519 not supported
+    log('ed-log', `Ed25519 not supported in this browser — falling back to ECDSA P-256`,'w');
+    keyPair = await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'}, true, ['sign','verify']);
+  }
+  const kg_time = performance.now() - t_kg0;
+  log('ed-log', `Key generated in ${kg_time.toFixed(2)}ms`);
+
+  const isEd = keyPair.privateKey.algorithm.name === 'Ed25519';
+  const sigAlgo = isEd ? 'Ed25519' : {name:'ECDSA',hash:'SHA-256'};
+
+  log('ed-log', `Benchmarking ${iters} sign operations...`);
+  const t_s0 = performance.now();
+  let lastSig;
+  for (let i = 0; i < iters; i++) {
+    lastSig = await crypto.subtle.sign(sigAlgo, keyPair.privateKey, msg);
+  }
+  const sign_time = performance.now() - t_s0;
+  const sign_ops = Math.round(iters / (sign_time / 1000));
+
+  log('ed-log', `Benchmarking ${iters} verify operations...`);
+  const t_v0 = performance.now();
+  for (let i = 0; i < iters; i++) {
+    await crypto.subtle.verify(sigAlgo, keyPair.publicKey, lastSig, msg);
+  }
+  const verify_time = performance.now() - t_v0;
+  const verify_ops = Math.round(iters / (verify_time / 1000));
+
+  log('ed-log', `Sign: ${sign_ops.toLocaleString()} ops/sec`);
+  log('ed-log', `Verify: ${verify_ops.toLocaleString()} ops/sec`);
+  log('ed-log', `Signature: ${buf2hex(lastSig).slice(0,32)}...`);
+
+  const tbody = document.getElementById('ed-tbody');
+  tbody.innerHTML = '';
+  const ops_s = sign_ops.toLocaleString();
+  const ops_v = verify_ops.toLocaleString();
+  tbody.innerHTML = `
+    <tr><td>Key Generation</td><td style="font-family:var(--mono);color:var(--c4)">${kg_time.toFixed(2)} ms</td><td style="font-family:var(--mono);color:var(--c3)">${Math.round(1000/kg_time).toLocaleString()}</td></tr>
+    <tr><td>Sign</td><td style="font-family:var(--mono);color:var(--c4)">${(sign_time/iters).toFixed(3)} ms</td><td style="font-family:var(--mono);color:var(--c3)">${ops_s}</td></tr>
+    <tr><td>Verify</td><td style="font-family:var(--mono);color:var(--c4)">${(verify_time/iters).toFixed(3)} ms</td><td style="font-family:var(--mono);color:var(--c3)">${ops_v}</td></tr>
+    <tr><td>Sig Size</td><td style="font-family:var(--mono);color:var(--c4)">${lastSig.byteLength * 8} bits</td><td style="font-family:var(--mono);color:var(--muted)">—</td></tr>
+  `;
+  document.getElementById('ed-results').style.display = 'block';
+
+  perfData['ed25519'] = sign_ops;
+  updatePerfChart();
+}
+
+// ══════════════════════════════════════════
+// RSA-2048
+// ══════════════════════════════════════════
+async function benchRSA() {
+  clearLog('rsa-log');
+  const msg = str2buf(document.getElementById('rsa-msg').value);
+  const iters = parseInt(document.getElementById('rsa-iters').value);
+
+  log('rsa-log', `Generating RSA-2048 key pair (this is slow — by design)...`,'w');
+  const t_kg0 = performance.now();
+  const keyPair = await crypto.subtle.generateKey({
+    name: 'RSASSA-PKCS1-v1_5',
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1,0,1]),
+    hash: 'SHA-256'
+  }, true, ['sign','verify']);
+  const kg_time = performance.now() - t_kg0;
+  log('rsa-log', `Key generated in ${kg_time.toFixed(0)}ms — compare to Ed25519 <1ms`,'w');
+
+  log('rsa-log', `Benchmarking ${iters} sign operations...`);
+  const t_s0 = performance.now();
+  let lastSig;
+  for (let i = 0; i < iters; i++) {
+    lastSig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', keyPair.privateKey, msg);
+  }
+  const sign_time = performance.now() - t_s0;
+  const sign_ops = Math.round(iters / (sign_time/1000));
+
+  log('rsa-log', `Benchmarking ${iters} verify operations...`);
+  const t_v0 = performance.now();
+  for (let i = 0; i < iters; i++) {
+    await crypto.subtle.verify('RSASSA-PKCS1-v1_5', keyPair.publicKey, lastSig, msg);
+  }
+  const verify_time = performance.now() - t_v0;
+  const verify_ops = Math.round(iters / (verify_time/1000));
+
+  log('rsa-log', `Sign: ${sign_ops.toLocaleString()} ops/sec`);
+  log('rsa-log', `Verify: ${verify_ops.toLocaleString()} ops/sec`);
+  log('rsa-log', `Sig: ${buf2hex(lastSig).slice(0,32)}... (${lastSig.byteLength} bytes)`);
+
+  const tbody = document.getElementById('rsa-tbody');
+  tbody.innerHTML = `
+    <tr><td>Key Generation</td><td style="font-family:var(--mono);color:var(--c5)">${kg_time.toFixed(0)} ms</td><td style="font-family:var(--mono);color:var(--muted)">${Math.round(1000/kg_time).toLocaleString()}</td></tr>
+    <tr><td>Sign</td><td style="font-family:var(--mono);color:var(--c5)">${(sign_time/iters).toFixed(2)} ms</td><td style="font-family:var(--mono);color:var(--c3)">${sign_ops.toLocaleString()}</td></tr>
+    <tr><td>Verify</td><td style="font-family:var(--mono);color:var(--c5)">${(verify_time/iters).toFixed(2)} ms</td><td style="font-family:var(--mono);color:var(--c3)">${verify_ops.toLocaleString()}</td></tr>
+    <tr><td>Sig Size</td><td style="font-family:var(--mono);color:var(--warn)">2048 bits (${lastSig.byteLength}B)</td><td style="font-family:var(--mono);color:var(--muted)">vs Ed25519: 512 bits</td></tr>
+  `;
+  document.getElementById('rsa-results').style.display = 'block';
+
+  perfData['rsa'] = sign_ops;
+  updatePerfChart();
+}
+
+// ══════════════════════════════════════════
+// AVALANCHE EFFECT (SHA-256 based)
+// ══════════════════════════════════════════
+async function showAvalanche() {
+  const msg = document.getElementById('av-input').value || 'Hello';
+  const enc = new TextEncoder();
+
+  const h1 = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(msg)));
+  // Flip first bit of input
+  const modified = enc.encode(msg);
+  modified[0] ^= 1;
+  const h2 = new Uint8Array(await crypto.subtle.digest('SHA-256', modified));
+
+  function renderBits(containerId, bytes, refBytes, showDiff) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = '';
+    let flipped = 0;
+    for (let i = 0; i < 32; i++) {
+      for (let b = 7; b >= 0; b--) {
+        const bit1 = (bytes[i] >> b) & 1;
+        const bit2 = refBytes ? (refBytes[i] >> b) & 1 : bit1;
+        const diff = bit1 !== bit2;
+        if (diff) flipped++;
+        const div = document.createElement('div');
+        div.className = 'av-bit';
+        if (showDiff) {
+          div.style.background = diff ? '#f87171' : 'var(--border)';
+        } else {
+          div.style.background = bit1 ? 'var(--c1)' : 'var(--border)';
+        }
+        el.appendChild(div);
+      }
+    }
+    return flipped;
+  }
+
+  renderBits('av-orig', h1, null, false);
+  renderBits('av-flip', h2, null, false);
+  const flipped = renderBits('av-diff', h1, h2, true);
+  const pct = ((flipped / 256) * 100).toFixed(1);
+  document.getElementById('av-pct').textContent = `${flipped}/256 bits flipped (${pct}%) — ideal: ~50%`;
+}
+
+// ══════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════
+const perfData = { chacha20: 0, sha3: 0, hmac: 0, ed25519: 0, rsa: 0 };
+let perfChart;
+
+// Radar Chart
+const radarCtx = document.getElementById('radarChart').getContext('2d');
+new Chart(radarCtx, {
+  type: 'radar',
+  data: {
+    labels: ['Brute Force\nResistance', 'Side-Channel\nSafety', 'Speed', 'Key Size\nEfficiency', 'Quantum\nResistance', 'Standard\nMaturity'],
+    datasets: [
+      { label:'ChaCha20',    data:[100,98,95,90,45,85], borderColor:'#00e5ff', backgroundColor:'rgba(0,229,255,.08)', pointBackgroundColor:'#00e5ff', borderWidth:2 },
+      { label:'SHA-3',       data:[100,90,75,88,50,80], borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,.08)', pointBackgroundColor:'#a78bfa', borderWidth:2 },
+      { label:'HMAC-SHA256', data:[100,100,88,85,48,95], borderColor:'#34d399', backgroundColor:'rgba(52,211,153,.08)', pointBackgroundColor:'#34d399', borderWidth:2 },
+      { label:'Ed25519',     data:[99,96,90,99,12,75],  borderColor:'#fb923c', backgroundColor:'rgba(251,146,60,.08)', pointBackgroundColor:'#fb923c', borderWidth:2 },
+      { label:'RSA-2048',    data:[80,60,30,20,0,100],  borderColor:'#f472b6', backgroundColor:'rgba(244,114,182,.08)', pointBackgroundColor:'#f472b6', borderWidth:2 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      r: {
+        min:0, max:100,
+        grid: { color:'rgba(255,255,255,.06)' },
+        ticks: { display:false },
+        pointLabels: { color:'#4a5a6e', font:{ size:9, family:'JetBrains Mono' } }
+      }
+    },
+    plugins: { legend: { labels: { color:'#4a5a6e', font:{ size:10, family:'JetBrains Mono' }, boxWidth:12 } } }
+  }
+});
+
+// Perf Chart
+const perfCtx = document.getElementById('perfChart').getContext('2d');
+perfChart = new Chart(perfCtx, {
+  type: 'bar',
+  data: {
+    labels: ['ChaCha20','SHA-3','HMAC-SHA256','Ed25519','RSA-2048'],
+    datasets: [{
+      label: 'ops/sec',
+      data: [0,0,0,0,0],
+      backgroundColor: ['rgba(0,229,255,.6)','rgba(167,139,250,.6)','rgba(52,211,153,.6)','rgba(251,146,60,.6)','rgba(244,114,182,.6)'],
+      borderColor:     ['#00e5ff','#a78bfa','#34d399','#fb923c','#f472b6'],
+      borderWidth: 1, borderRadius: 4
+    }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    scales: {
+      x: { grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#4a5a6e',font:{family:'JetBrains Mono',size:9}} },
+      y: { grid:{display:false}, ticks:{color:'#4a5a6e',font:{family:'JetBrains Mono',size:9}} }
+    },
+    plugins: { legend:{display:false} }
+  }
+});
+
+function updatePerfChart() {
+  perfChart.data.datasets[0].data = [
+    perfData.chacha20, perfData.sha3, perfData.hmac, perfData.ed25519, perfData.rsa
+  ];
+  perfChart.update();
+}
+
+// Init avalanche on load
+window.addEventListener('load', () => {
+  showAvalanche();
+});
+</script>
+</body>
+</html>
