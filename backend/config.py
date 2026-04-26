@@ -2,8 +2,8 @@ import os
 
 class Config:
 
-    # Use environment variables (secure)
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev_secret")
+    # Must match the HMAC key used in auth.js on the frontend
+    SECRET_KEY = os.getenv("SECRET_KEY", "super_secret_key_123")
 
     # Fernet key must be set in env
     FERNET_KEY = os.getenv("FERNET_KEY")

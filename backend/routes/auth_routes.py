@@ -34,9 +34,11 @@ def login():
         return jsonify({"message": "Request expired"}), 400
 
     payload = {
-        "fingerprint": data['fingerprint'],
-        "timestamp": timestamp
-    }
+    "username": data['username'],
+    "password": data['password'],
+    "fingerprint": data['fingerprint'],
+    "timestamp": timestamp
+}
 
     if not verify_hmac(payload, data.get("signature", "")):
         return jsonify({"message": "Invalid request signature"}), 400
